@@ -52,7 +52,7 @@ python3 train.py --sample NUMBER_OF_SAMPLES
 
 Enable general generation of MIDI files: Currently only able to generate classical music.
 
-Add length flag for sampling: Currently fixed at 4096 time steps. (~43 seconds)
+~~Add length flag for sampling: Currently fixed at 4096 time steps. (~43 seconds)~~ Added length flag. Unit of length: 1/96(s).
 
 ## Authors
 

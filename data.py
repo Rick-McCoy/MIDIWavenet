@@ -49,6 +49,7 @@ def piano_roll(path, receptive_field):
         song = pm.PrettyMIDI(midi_file=str(path))
     classes = [0, 3, 5, 7, 8, 9]
     limits = [[24, 96], [36, 84], [24, 96], [36, 84], [36, 84], [60, 96]]
+    limit_slice = [0, 72, 120, 192, 240, 288, 324]
     piano_rolls = [(_.get_piano_roll(fs=song.resolution), _.program) for _ in song.instruments if not _.is_drum and _.program // 8 in classes]
     length = np.amax([roll.shape[1] for roll, _ in piano_rolls])
     data_full = np.zeros(shape=(326, length))
@@ -56,7 +57,7 @@ def piano_roll(path, receptive_field):
     for roll, instrument in piano_rolls:
         i = classes.index(instrument // 8)
         sliced_roll = roll[limits[i][0]:limits[i][1]]
-        data_full[limits[i][0]:limits[i][1]] += np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
+        data_full[limit_slice[i]:limit_slice[i + 1]] += np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
         condition[i] = 1
     num = np.random.randint(0, length)
     data = data_full[:, num : INPUT_LENGTH + num]

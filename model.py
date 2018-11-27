@@ -7,8 +7,6 @@ from tqdm import tqdm
 from data import INPUT_LENGTH, clean, piano_rolls_to_midi, save_roll
 from network import Wavenet as WavenetModule
 
-GEN_LENGTH = 4096
-
 class Wavenet:
     def __init__(
             self, 
@@ -71,10 +69,10 @@ class Wavenet:
         else:
             return loss.item()
 
-    def sample(self, step, temperature=1., init=None, condition=None):
+    def sample(self, step, temperature=1., init=None, condition=None, length=2048):
         if not os.path.isdir('Samples'):
             os.mkdir('Samples')
-        roll = self.generate(temperature, init, condition)
+        roll = self.generate(temperature, init, condition, length)
         roll = clean(roll)
         save_roll(roll, step)
         midi = piano_rolls_to_midi(roll)
@@ -106,17 +104,17 @@ class Wavenet:
                         output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
         return output
 
-    def generate(self, temperature=1., init=None, condition=None):
+    def generate(self, temperature=1., init=None, condition=None, length=2048):
         if init is None:
             init = self.gen_init(condition)
         else:
             init = np.expand_dims(init, axis=0)
             condition = np.expand_dims(condition, axis=0)
-        init = init[:, :, -self.receptive_field - 2:-1] # pylint: disable=E1130
+        init = init[:, :, :self.receptive_field + 2] # pylint: disable=E1130
         output = np.zeros((self.out_channels, 1))
         self.net.module.fill_queues(torch.Tensor(init).cuda(), torch.Tensor(condition).cuda())
         x = init[:, :, -2:]
-        for _ in tqdm(range(GEN_LENGTH)):
+        for _ in tqdm(range(length)):
             nxt = self.net.module.sample_forward(torch.Tensor(x).cuda(), torch.Tensor(condition).cuda()).detach().cpu().numpy()
             if temperature != 1:
                 nxt = np.power(nxt + 0.5, temperature) - 0.5
@@ -125,7 +123,7 @@ class Wavenet:
             output = np.concatenate((output, nxt[0]), axis=1)
             x = np.concatenate((x, nxt), axis=2)
             x = x[:, :, 1:]
-        return output[:, -GEN_LENGTH:]
+        return output[:, -length:]
 
     def save(self, step):
         if not os.path.exists('Checkpoints'):

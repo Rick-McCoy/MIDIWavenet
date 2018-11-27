@@ -66,17 +66,17 @@ class Trainer():
                 tqdm.write('Testing step Loss: {}'.format(train_loss))
                 end_step = (epoch + 1) * self.train_data_loader.__len__()
                 sample_init, _, sample_condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
-                sampled_image = self.wavenet.sample(end_step, init=sample_init, condition=sample_condition)
+                sampled_image = self.wavenet.sample(end_step, init=sample_init, condition=sample_condition, length=self.args.length)
                 self.test_writer.add_scalar('Testing loss', train_loss, end_step)
                 self.test_writer.add_image('Sampled', sampled_image, end_step)
                 self.wavenet.save(end_step)
 
-    def sample(self, num):
+    def sample(self, num, length):
         self.load_last_checkpoint()
         with torch.no_grad():
             for _ in tqdm(range(num)):
                 sample_init, _, sample_condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
-                self.wavenet.sample('Sample_{}'.format(int(time.time())), temperature=self.args.temperature, init=sample_init, condition=sample_condition)
+                self.wavenet.sample('Sample_{}'.format(int(time.time())), temperature=self.args.temperature, init=sample_init, condition=sample_condition, length=length)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -95,6 +95,7 @@ if __name__ == '__main__':
     parser.add_argument('--shuffle', type=bool, default=True)
     parser.add_argument('--num_workers', type=int, default=16)
     parser.add_argument('--sample', type=int, default=0)
+    parser.add_argument('--length', type=int, default=2048)
     parser.add_argument('--temperature', type=float, default=1.)
 
     args = parser.parse_args()
@@ -105,6 +106,6 @@ if __name__ == '__main__':
     trainer = Trainer(args)
 
     if args.sample > 0:
-        trainer.sample(args.sample)
+        trainer.sample(args.sample, args.length)
     else:
         trainer.run()
