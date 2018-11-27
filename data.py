@@ -14,7 +14,7 @@ import torch.utils.data as data
 
 INPUT_LENGTH = 8192
 MAX_LENGTH = 32768
-pathlist = list(pathlib.Path('Classics').glob('**/*.mid'))
+pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid'))
 trainlist = pathlist[:-144]
 testlist = pathlist[-144:]
 
@@ -51,24 +51,26 @@ def piano_roll(path, receptive_field):
     limits = [[24, 96], [36, 84], [24, 96], [36, 84], [36, 84], [60, 96]]
     piano_rolls = [(_.get_piano_roll(fs=song.resolution), _.program) for _ in song.instruments if not _.is_drum and _.program // 8 in classes]
     length = np.amax([roll.shape[1] for roll, _ in piano_rolls])
-    data_full = np.zeros(shape=(331, length))
+    data_full = np.zeros(shape=(326, length))
+    condition = np.zeros(shape=(6, 1))
     for roll, instrument in piano_rolls:
         i = classes.index(instrument // 8)
         sliced_roll = roll[limits[i][0]:limits[i][1]]
         data_full[limits[i][0]:limits[i][1]] += np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
-        data_full[325 + i] = 1
-    if length < INPUT_LENGTH:
-        data = np.pad(data_full, [(0, 0), (INPUT_LENGTH - length, 0)], 'constant')
-    else:
-        num = np.random.randint(0, length - INPUT_LENGTH + 1)
-        data = data_full[:, num : INPUT_LENGTH + num]
+        condition[i] = 1
+    num = np.random.randint(0, length)
+    data = data_full[:, num : INPUT_LENGTH + num]
     data[324] += 1 - data[:324].sum(axis = 0)
+    length = data.shape[1]
+    if length < INPUT_LENGTH:
+        data = np.pad(data, [(0, 0), (0, INPUT_LENGTH - length)], 'constant')
+        data[325, length - INPUT_LENGTH:] = 1
     data = data > 0
-    answer = np.transpose(data[:325, receptive_field + 1:], (1, 0))
-    return data.astype(np.float32), answer.astype(np.float32)
+    answer = np.transpose(data[:, receptive_field + 1:], axes=(1, 0))
+    return data.astype(np.float32), answer.astype(np.float32), condition.astype(np.float32)
 
 def clean(x):
-    return x[:-1]
+    return x[:-2]
 
 def save_roll(x, step):
     fig = plt.figure(figsize=(72, 24))
@@ -140,8 +142,8 @@ def Test():
 #   instruments = [0, 3, 5, 7, 8, 9]
 #   limits = [[24, 96], [36, 84], [24, 96], [36, 84], [36, 84], [60, 96]]
     lengthlist = []
-    resolutionlist = []
-    namelist = []
+    #resolutionlist = []
+    #namelist = []
     programlist = [0] * 128
 #   ratiolist = []
     over_limit = 0

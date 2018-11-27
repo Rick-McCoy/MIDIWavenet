@@ -20,6 +20,7 @@ class Wavenet:
             skip_channels, 
             end_channels, 
             out_channels, 
+            condition_channels, 
             lr, writer
         ):
         self.net = WavenetModule(
@@ -30,7 +31,8 @@ class Wavenet:
             dilation_channels, 
             skip_channels, 
             end_channels, 
-            out_channels
+            out_channels, 
+            condition_channels
         )
         self.receptive_field = self.net.receptive_field
         self._prepare_for_gpu()
@@ -51,11 +53,11 @@ class Wavenet:
     
     def _prepare_for_gpu(self):
         if torch.cuda.is_available():
-            self.net = torch.nn.DataParallel(self.net)
             self.net.cuda()
+            self.net = torch.nn.DataParallel(self.net)
 
-    def train(self, x, real, step=1, train=True, total=0):
-        output = self.net(x).transpose(1, 2)[:, :-1, :]
+    def train(self, x, real, condition, step=1, train=True, total=0):
+        output = self.net(x, condition).transpose(1, 2)[:, :-1, :]
         loss = self.loss(output.reshape(-1, self.out_channels), real.reshape(-1, self.out_channels))
         self.optimizer.zero_grad()
         if train:
@@ -69,10 +71,10 @@ class Wavenet:
         else:
             return loss.item()
 
-    def sample(self, step, temperature=1., init=None):
+    def sample(self, step, temperature=1., init=None, condition=None):
         if not os.path.isdir('Samples'):
             os.mkdir('Samples')
-        roll = self.generate(temperature, init)
+        roll = self.generate(temperature, init, condition)
         roll = clean(roll)
         save_roll(roll, step)
         midi = piano_rolls_to_midi(roll)
@@ -81,38 +83,46 @@ class Wavenet:
         roll = np.expand_dims(roll.T, axis=0)
         return roll
 
-    def gen_init(self):
+    def gen_init(self, condition=None):
         channels = [0, 72, 120, 192, 240, 288, 324]
         output = np.zeros([1, self.channels, self.receptive_field + 2])
         output[:, 324] = 1
-        for i in range(6):
-            num = np.random.randint(0, 4)
-            on = np.random.randint(0, 2)
-            for j in range(num):
-                if on:
-                    output[:, 324, -1] = 0
+        if condition is None:
+            for i in range(6):
+                num = np.random.randint(0, 4)
+                on = np.random.randint(0, 2)
+                for j in range(num):
+                    if on:
+                        output[:, 324, -1] = 0
+                        output[:, 324 + j] = 1
+                        output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
+                        on = np.random.randint(0, 2)
+        else:
+            output[:, condition[:, 0] > 0] = 1
+            for i, j in enumerate(condition):
+                if j:
                     output[:, 324 + j] = 1
-                    output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
-                    on = np.random.randint(0, 2)
+                    for _ in range(np.random.randint(0, 4)):
+                        output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
         return output
 
-    def generate(self, temperature=1., init=None):
+    def generate(self, temperature=1., init=None, condition=None):
         if init is None:
-            init = self.gen_init()
+            init = self.gen_init(condition)
         else:
             init = np.expand_dims(init, axis=0)
+            condition = np.expand_dims(condition, axis=0)
         init = init[:, :, -self.receptive_field - 2:-1] # pylint: disable=E1130
         output = np.zeros((self.out_channels, 1))
-        self.net.module.fill_queues(torch.Tensor(init).cuda())
+        self.net.module.fill_queues(torch.Tensor(init).cuda(), torch.Tensor(condition).cuda())
         x = init[:, :, -2:]
         for _ in tqdm(range(GEN_LENGTH)):
-            nxt = self.net.module.sample_forward(torch.Tensor(x).cuda()).detach().cpu().numpy()
+            nxt = self.net.module.sample_forward(torch.Tensor(x).cuda(), torch.Tensor(condition).cuda()).detach().cpu().numpy()
             if temperature != 1:
                 nxt = np.power(nxt + 0.5, temperature) - 0.5
             nxt = nxt > np.random.rand(1, self.out_channels, 1)
             nxt = nxt.astype(np.float32)
             output = np.concatenate((output, nxt[0]), axis=1)
-            nxt = np.concatenate((nxt, x[:, -6:, :1]), axis=1)
             x = np.concatenate((x, nxt), axis=2)
             x = x[:, :, 1:]
         return output[:, -GEN_LENGTH:]
