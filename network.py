@@ -9,7 +9,7 @@ class CausalConv1d(torch.nn.Module):
         self.conv = torch.nn.Conv1d(in_channels, out_channels, 
                                     kernel_size=2, padding=1, 
                                     dilation=1, bias=False)
-    
+
     def forward(self, x):
         return self.conv(x)[:, :, :-1]
 
@@ -83,12 +83,12 @@ class ResidualStack(torch.nn.Module):
                 condition_channels
             )
         )
-        
+
     def stack_res_blocks(self, residual_channels, dilation_channels, skip_channels, condition_channels):
         dilations = [2 ** i for i in range(self.layer_size)] * self.stack_size
         res_blocks = [ResidualBlock(residual_channels, dilation_channels, skip_channels, condition_channels, dilation) for dilation in dilations]
         return res_blocks
-    
+
     def forward(self, x, condition, skip_size):
         output = x
         res_sum = 0
@@ -100,9 +100,11 @@ class ResidualStack(torch.nn.Module):
     def sample_forward(self, x, condition):
         output = x
         res_sum = 0
+        top = []
         for res_block in self.res_blocks:
-            top = res_block.queue.get()
-            res_block.queue.put(output)
+            for i in range(output.shape[2]):
+                top.append(res_block.queue.get())
+                res_block.queue.put(output[:, :, i - output.shape[2]:])
             full = torch.cat((top, output), dim=2) # pylint: disable=E1101
             output, skip = res_block(full, condition, 1, sample=True)
             res_sum += skip
@@ -157,7 +159,7 @@ class Wavenet(torch.nn.Module):
             condition_channels
         )
         self.post = PostProcess(skip_channels, end_channels, out_channels)
-    
+
     @staticmethod
     def calc_receptive_field(layer_size, stack_size):
         layers = [2 ** i for i in range(layer_size)] * stack_size
@@ -173,7 +175,7 @@ class Wavenet(torch.nn.Module):
         output = self.res_stacks(output, condition, output_size)
         output = self.post(output)
         return output
-    
+
     def sample_forward(self, x, condition):
         output = self.causal(x)[:, :, 1:]
         output = self.res_stacks.sample_forward(output, condition)

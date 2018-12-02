@@ -28,20 +28,25 @@ def full_piano_roll(path, receptive_field):
     piano_rolls = [(_.get_piano_roll(fs=song.resolution), _.program) for _ in song.instruments if not _.is_drum]
     drum_rolls = [(_.get_piano_roll(fs=song.resolution), _.program) for _ in song.instruments if _.is_drum]
     length = np.amax([roll.shape[1] for roll, _ in piano_rolls + drum_rolls])
-    data = np.zeros(shape=(129 * 129 + 1, length))
+    data = np.zeros(shape=(128 * 129 + 2, length))
+    condition = np.zeros(shape=(129, 1))
     for roll, instrument in piano_rolls:
         data[instrument * 128: (instrument + 1) * 128] += np.pad(roll, [(0, 0), (0, length - roll.shape[1])], 'constant')
-        data[128 * 129 + instrument] = 1
+        condition[instrument] = 1
     for roll, instrument in drum_rolls:
         data[128 * 128 : 128 * 129] += np.pad(roll, [(0, 0), (0, length - roll.shape[1])], 'constant')
-        data[129 * 129 - 1] = 1
-    if length >= MAX_LENGTH:
-        num = np.random.randint(0, length - MAX_LENGTH + 1)
-        data = data[:, num : num + MAX_LENGTH]
-    data[129 * 129] += 1 - data.sum(axis=0)
+        condition[-1] = 1
+    num = np.random.randint(0, length)
+    data = data[:, num:num + MAX_LENGTH]
+    data[-2] += 1 - data[:-2].sum(axis=0)
+    length = data.shape[1]
+    if length < MAX_LENGTH:
+        data = np.pad(data, [(0, 0), (0, MAX_LENGTH - length)], 'constant')
+        data[-1, length - MAX_LENGTH] = 1
     data = data > 0
     answer = np.transpose(data[:, receptive_field + 1:], (1, 0))
-    return data.astype(np.float32), answer.astype(np.float32)
+    diff = np.sum(np.diff(data)[:, receptive_field:], axis=0, keepdims=True) > 0
+    return data.astype(np.float32), answer.astype(np.float32), diff.astype(np.float32), condition.astype(np.float32)
 
 def piano_roll(path, receptive_field):
     with warnings.catch_warnings():
@@ -68,7 +73,8 @@ def piano_roll(path, receptive_field):
         data[325, length - INPUT_LENGTH:] = 1
     data = data > 0
     answer = np.transpose(data[:, receptive_field + 1:], axes=(1, 0))
-    return data.astype(np.float32), answer.astype(np.float32), condition.astype(np.float32)
+    diff = np.sum(np.diff(data)[:, receptive_field:], axis=0, keepdims=True) > 0
+    return data.astype(np.float32), answer.astype(np.float32), diff.astype(np.float32), condition.astype(np.float32)
 
 def clean(x):
     return x[:-2]
@@ -136,71 +142,13 @@ class DataLoader(data.DataLoader):
         super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers)
 
 def Test():
-    pathlist = list(pathlib.Path('Datasets/lmd_matched').glob('**/*.mid'))
-#   pathlist = list(pathlib.Path('Classics').glob('**/*.mid'))# + list(pathlib.Path('Classics').glob('**/*.MID'))
-    np.random.shuffle(pathlist)
-    print(len(pathlist))
-#   instruments = [0, 3, 5, 7, 8, 9]
-#   limits = [[24, 96], [36, 84], [24, 96], [36, 84], [36, 84], [60, 96]]
-    lengthlist = []
-    #resolutionlist = []
-    #namelist = []
-    programlist = [0] * 128
-#   ratiolist = []
-    over_limit = 0
-    for path in tqdm(pathlist[:1000]):
-        try:
-            song = pm.PrettyMIDI(midi_file=str(path))
-        except:
-            continue
-        #resolutionlist.append(song.resolution)
-        lengthlist.append(len(song.instruments))
-#       lengthlist.append(song.get_end_time())
-#       rolls = [(_.get_piano_roll(), _.program) for _ in song.instruments if _.program // 8 in instruments and not _.is_drum]
-#       rolls = [(_.get_piano_roll(), _.program) for _ in song.instruments if not _.is_drum]
-#       rolls = [_.program for _ in song.instruments if not _.is_drum]
-#       drum_rolls = [_ for _ in song.instruments if _.is_drum]
-#       if len(rolls) > 0:
-#          program_bool = [0] * 128
-#          for _, i in rolls:
-#              program_bool[i] += 1
-#          for i, j in enumerate(program_bool):
-#              programlist[i] += j > 0
-#          lengthlist.append(np.amax([_.shape[1] for _, _1 in rolls]))
-#          lengthlist.append(song.get_end_time())
-#          namelist.append((str(path), str(np.amax([_.shape[1] for _, _1 in rolls]))))
-#          ratiolist.append(np.amax([_.shape[1] for _, _1 in rolls]) / song.get_end_time())
-#          lengthlist.append((str(path), np.amax([_.shape[1] for _, _1 in rolls] + [INPUT_LENGTH]) - INPUT_LENGTH + 1))
-#          if np.amax([_.shape[1] for _, _1 in rolls]) >= 8192:
-#              over_limit += 1
-#          if song.get_end_time() >= 81:
-#              over_limit += 1
-#       if len(drum_rolls) > 0:
-#           program_bool = [0] * 128
-#           for i in drum_rolls:
-#               for note in i.notes:
-#                   program_bool[note.pitch] += 1
-#           for i, j in enumerate(program_bool):
-#               programlist[i] += j > 0
-    print(programlist)
-    print(over_limit)
-    print(np.sum(lengthlist))
-#   file_length = open('lmd_length.txt', 'w')
-#   for path, length in namelist:
-#       file_length.write(path + ' ' + str(length) + '\n')
-#   file_length.close()
-#   lengthlist /= np.sum(lengthlist)
-    plt.hist(lengthlist)
-#   plt.hist(resolutionlist, bins=100)
-#   plt.axis([0, 1e5, 0, 200])
-    plt.grid()
-    plt.show()
-#   plt.savefig('Images/Amounts.png')
-    plt.close()
-#   plt.hist(ratiolist, bins=100)
-#   plt.grid()
-#   plt.show()
-#   plt.close()
+    pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid'))
+    for path in tqdm(pathlist[:1]):
+        data, answer, diff, condition = piano_roll(path, 5115)
+        tqdm.write(str(data.shape))
+        tqdm.write(str(answer.shape))
+        tqdm.write(str(diff.shape))
+        tqdm.write(str(condition.shape))
 
 if __name__ == '__main__':
     Test()

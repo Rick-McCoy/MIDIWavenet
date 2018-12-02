@@ -1,5 +1,6 @@
 import os
 import torch
+import itertools
 import torch.optim
 import numpy as np
 import pretty_midi as pm
@@ -8,61 +9,70 @@ from data import INPUT_LENGTH, clean, piano_rolls_to_midi, save_roll
 from network import Wavenet as WavenetModule
 
 class Wavenet:
-    def __init__(
-            self, 
-            layer_size, 
-            stack_size, 
-            channels, 
-            residual_channels, 
-            dilation_channels, 
-            skip_channels, 
-            end_channels, 
-            out_channels, 
-            condition_channels, 
-            lr, writer
-        ):
-        self.net = WavenetModule(
-            layer_size, 
-            stack_size, 
-            channels, 
-            residual_channels, 
-            dilation_channels, 
-            skip_channels, 
-            end_channels, 
-            out_channels, 
-            condition_channels
+    def __init__(self, args, writer):
+        self.large_net = WavenetModule(
+            args.layer_size, 
+            args.stack_size, 
+            args.channels, 
+            args.residual_channels, 
+            args.dilation_channels, 
+            args.skip_channels, 
+            args.end_channels, 
+            args.out_channels, 
+            args.condition_channels
         )
-        self.receptive_field = self.net.receptive_field
+        self.small_net = WavenetModule(
+            args.layer_size_small, 
+            args.stack_size_small, 
+            args.channels_small, 
+            args.residual_channels_small, 
+            args.dilation_channels_small, 
+            args.skip_channels_small, 
+            args.end_channels_small, 
+            args.out_channels_small, 
+            args.condition_channels_small
+        )
+        self.receptive_field = self.large_net.receptive_field
         self._prepare_for_gpu()
-        self.channels = channels
-        self.out_channels = out_channels
-        self.lr = lr
+        self.channels = args.channels
+        self.out_channels = args.out_channels
+        self.learning_rate = args.learning_rate
         self.sigmoid = torch.nn.Sigmoid()
         self.loss = self._loss()
         self.optimizer = self._optimizer()
         self.writer = writer
+        self.total = 0
     
     def _loss(self):
         loss = torch.nn.BCELoss()
         return loss
 
     def _optimizer(self):
-        return torch.optim.Adam(self.net.parameters(), lr=self.lr)
+        return torch.optim.Adam(itertools.chain(self.large_net.parameters(), self.small_net.parameters()), lr=self.learning_rate)
     
     def _prepare_for_gpu(self):
         if torch.cuda.is_available():
-            self.net.cuda()
-            self.net = torch.nn.DataParallel(self.net)
+            self.large_net.cuda()
+            self.large_net = torch.nn.DataParallel(self.large_net)
+            self.small_net.cuda()
+            self.small_net = torch.nn.DataParallel(self.small_net)
 
-    def train(self, x, real, condition, step=1, train=True, total=0):
-        output = self.net(x, condition).transpose(1, 2)[:, :-1, :]
-        loss = self.loss(output.reshape(-1, self.out_channels), real.reshape(-1, self.out_channels))
+    def train(self, x, real, diff, condition, step=1, train=True):
+        mask = self.small_net(x, condition).transpose(1, 2)[:, :-1, :]
+        output = self.large_net(x, condition).transpose(1, 2)[:, :-1, :]
+        masked_output = output * diff
+        masked_real = real * diff
+        masked_output = masked_output.reshape(-1, self.out_channels)
+        masked_real = masked_real.reshape(-1, self.out_channels)
+        loss_large = self.loss(masked_output, masked_real)
+        loss_small = self.loss(mask, diff)
+        loss = loss_large + loss_small
         self.optimizer.zero_grad()
         if train:
             loss.backward()
             self.optimizer.step()
             if step % 20 == 19:
-                tqdm.write('Training step {}/{} Loss: {}'.format(step, total, loss))
+                tqdm.write('Training step {}/{} Loss: {}'.format(step, self.total, loss))
                 self.writer.add_scalar('Training loss', loss.item(), step)
                 self.writer.add_image('Real', real[:1], step)
                 self.writer.add_image('Generated', output[:1], step)
@@ -112,10 +122,10 @@ class Wavenet:
             condition = np.expand_dims(condition, axis=0)
         init = init[:, :, :self.receptive_field + 2] # pylint: disable=E1130
         output = np.zeros((self.out_channels, 1))
-        self.net.module.fill_queues(torch.Tensor(init).cuda(), torch.Tensor(condition).cuda())
+        self.large_net.module.fill_queues(torch.Tensor(init).cuda(), torch.Tensor(condition).cuda())
         x = init[:, :, -2:]
         for _ in tqdm(range(length)):
-            nxt = self.net.module.sample_forward(torch.Tensor(x).cuda(), torch.Tensor(condition).cuda()).detach().cpu().numpy()
+            nxt = self.large_net.module.sample_forward(torch.Tensor(x).cuda(), torch.Tensor(condition).cuda()).detach().cpu().numpy()
             if temperature != 1:
                 nxt = np.power(nxt + 0.5, temperature) - 0.5
             nxt = nxt > np.random.rand(1, self.out_channels, 1)
@@ -128,8 +138,11 @@ class Wavenet:
     def save(self, step):
         if not os.path.exists('Checkpoints'):
             os.mkdir('Checkpoints')
-        torch.save(self.net.state_dict(), 'Checkpoints/{}.pkl'.format(step))
+        torch.save(self.large_net.state_dict(), 'Checkpoints/{}_large.pkl'.format(step))
+        torch.save(self.small_net.state_dict(), 'Checkpoints/{}_small.pkl'.format(step))
     
-    def load(self, path):
-        tqdm.write('Loading from {}'.format(path))
-        self.net.load_state_dict(torch.load(path))
+    def load(self, path_large, path_small):
+        tqdm.write('Loading from {}'.format(path_large))
+        self.large_net.load_state_dict(torch.load(path_large))
+        tqdm.write('Loading from {}'.format(path_small))
+        self.small_net.load_state_dict(torch.load(path_small))
