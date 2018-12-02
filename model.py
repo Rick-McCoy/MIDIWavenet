@@ -96,22 +96,13 @@ class Wavenet:
         output = np.zeros([1, self.channels, self.receptive_field + 2])
         output[:, 324] = 1
         if condition is None:
-            for i in range(6):
-                num = np.random.randint(0, 4)
-                on = np.random.randint(0, 2)
-                for j in range(num):
-                    if on:
-                        output[:, 324, -1] = 0
-                        output[:, 324 + j] = 1
-                        output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
-                        on = np.random.randint(0, 2)
-        else:
-            output[:, condition[:, 0] > 0] = 1
-            for i, j in enumerate(condition):
-                if j:
-                    output[:, 324 + j] = 1
-                    for _ in range(np.random.randint(0, 4)):
-                        output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
+            condition = np.random.randint(2, size=(6))
+        output[:, condition[:, 0] > 0] = 1
+        for i, j in enumerate(condition):
+            if j:
+                output[:, 324 + j] = 1
+                for _ in range(np.random.randint(0, 4)):
+                    output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
         return output
 
     def generate(self, temperature=1., init=None, condition=None, length=2048):
@@ -123,8 +114,14 @@ class Wavenet:
         init = init[:, :, :self.receptive_field + 2] # pylint: disable=E1130
         output = np.zeros((self.out_channels, 1))
         self.large_net.module.fill_queues(torch.Tensor(init).cuda(), torch.Tensor(condition).cuda())
+        self.small_net.module.fill_queues(torch.Tensor(init).cuda(), torch.Tensor(condition).cuda())
         x = init[:, :, -2:]
         for _ in tqdm(range(length)):
+            cont = self.small_net.module.sample_forward(torch.Tensor(x).cuda(), torch.Tensor(condition).cuda()).detach().cpu().numpy()
+            if np.random.rand(1, 1, 1) > cont:
+                output = np.concatenate((output, x[0, :, -1]), axis=1)
+                x = np.concatenate((x, x[:, :, -1:]), axis=2)
+                continue
             nxt = self.large_net.module.sample_forward(torch.Tensor(x).cuda(), torch.Tensor(condition).cuda()).detach().cpu().numpy()
             if temperature != 1:
                 nxt = np.power(nxt + 0.5, temperature) - 0.5
@@ -132,7 +129,7 @@ class Wavenet:
             nxt = nxt.astype(np.float32)
             output = np.concatenate((output, nxt[0]), axis=1)
             x = np.concatenate((x, nxt), axis=2)
-            x = x[:, :, 1:]
+            x = x[:, :, -2:]
         return output[:, -length:]
 
     def save(self, step):

@@ -33,6 +33,7 @@ class Trainer():
             False
         )
         self.wavenet.total = self.train_data_loader.__len__() * self.args.num_epochs
+        self.load_last_checkpoint(self.args.resume)
     
     def load_last_checkpoint(self, resume=0):
         if resume > 0:
@@ -45,7 +46,6 @@ class Trainer():
                 self.wavenet.load(str(checkpoint_list[-2]), str(checkpoint_list[-1]))
 
     def run(self):
-        self.load_last_checkpoint(self.args.resume)
         for epoch in tqdm(range(self.args.num_epochs)):
             for i, (sample, real, diff, condition) in tqdm(enumerate(self.train_data_loader), total=self.train_data_loader.__len__()):
                 step = i + epoch * self.train_data_loader.__len__()
@@ -57,18 +57,16 @@ class Trainer():
                 train_loss /= self.test_data_loader.__len__()
                 tqdm.write('Testing step Loss: {}'.format(train_loss))
                 end_step = (epoch + 1) * self.train_data_loader.__len__()
-                sample_init, _, sample_condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
-                sampled_image = self.wavenet.sample(end_step, init=sample_init, condition=sample_condition, length=self.args.length)
+                sampled_image = self.sample(num=1, length=self.args.length, name=end_step)
                 self.test_writer.add_scalar('Testing loss', train_loss, end_step)
                 self.test_writer.add_image('Sampled', sampled_image, end_step)
                 self.wavenet.save(end_step)
 
-    def sample(self, num, length, resume):
-        self.load_last_checkpoint(resume)
-        with torch.no_grad():
-            for _ in tqdm(range(num)):
-                sample_init, _, sample_condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
-                self.wavenet.sample('Sample_{}'.format(int(time.time())), temperature=self.args.temperature, init=sample_init, condition=sample_condition, length=length)
+    def sample(self, num, length, name='Sample_{}'.format(int(time.time()))):
+        for _ in tqdm(range(num)):
+            sample_init, _, sample_condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
+            sampled_image = self.wavenet.sample(name, temperature=self.args.temperature, init=sample_init, condition=sample_condition, length=length)
+        return sampled_image
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
