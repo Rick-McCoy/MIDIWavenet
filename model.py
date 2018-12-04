@@ -79,12 +79,12 @@ class Wavenet:
             self.optimizer.step()
             if step % 20 == 19:
                 tqdm.write('Training step {}/{} Large loss: {}, Small loss: {}'.format(step, self.total, loss_large.item(), loss_small.item()))
-                self.writer.add_scalar('Large loss', loss_large.item(), step)
-                self.writer.add_scalar('Small loss', loss_small.item(), step)
-                self.writer.add_image('Real', real[:1], step)
-                self.writer.add_image('Generated', output[:1].sigmoid_(), step)
-                self.writer.add_image('Mask', writer_mask, step)
-                self.writer.add_image('Diff', writer_diff, step)
+                self.writer.add_scalar('Train/Large loss', loss_large.item(), step)
+                self.writer.add_scalar('Train/Small loss', loss_small.item(), step)
+                self.writer.add_image('Score/Real', real[:1], step)
+                self.writer.add_image('Score/Generated', output[:1].sigmoid_(), step)
+                self.writer.add_image('Hidden/Mask', writer_mask, step)
+                self.writer.add_image('Hidden/Diff', writer_diff, step)
         return loss_large.item(), loss_small.item()
 
     def sample(self, step, temperature=1., init=None, diff=None, condition=None, length=2048):

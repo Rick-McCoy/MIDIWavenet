@@ -74,9 +74,9 @@ class Trainer():
                 tqdm.write('Testing step Small Loss: {}'.format(train_loss_small))
                 end_step = (epoch + 1) * self.train_data_loader.__len__()
                 sampled_image = self.sample(num=1, name=end_step)
-                self.test_writer.add_scalar('Testing large loss', train_loss_large, end_step)
-                self.test_writer.add_scalar('Testing small loss', train_loss_small, end_step)
-                self.test_writer.add_image('Sampled', sampled_image, end_step)
+                self.test_writer.add_scalar('Test/Testing large loss', train_loss_large, end_step)
+                self.test_writer.add_scalar('Test/Testing small loss', train_loss_small, end_step)
+                self.test_writer.add_image('Score/Sampled', sampled_image, end_step)
                 self.wavenet.save(end_step)
 
     def sample(self, num, name='Sample_{}'.format(int(time.time()))):
