@@ -47,12 +47,12 @@ class ResidualBlock(torch.nn.Module):
         conditional_gate = self.conditional_gate_conv(condition)
         dilated_filter += conditional_filter
         if time_series is not None:
-            time_series_filter = self.time_filter_conv(time_series[:, :, -dilated_filter.shape[2]:])
+            time_series_filter = self.time_filter_conv(time_series)
             dilated_filter += time_series_filter
         dilated_filter.tanh_()
         dilated_gate += conditional_gate
         if time_series is not None:
-            time_series_gate = self.time_gate_conv(time_series[:, :, -dilated_gate.shape[2]:])
+            time_series_gate = self.time_gate_conv(time_series)
             dilated_gate += time_series_gate
         dilated_gate.sigmoid_()
         dilated = dilated_filter * conditional_gate
@@ -86,9 +86,9 @@ class ResidualStack(torch.nn.Module):
                 time_series_channels
             )
         )
+        self.dilations = [2 ** i for i in range(self.layer_size)] * self.stack_size
 
     def stack_res_blocks(self, residual_channels, dilation_channels, skip_channels, condition_channels, time_series_channels):
-        dilations = [2 ** i for i in range(self.layer_size)] * self.stack_size
         res_blocks = [ResidualBlock(
             residual_channels, 
             dilation_channels, 
@@ -96,13 +96,14 @@ class ResidualStack(torch.nn.Module):
             condition_channels, 
             dilation, 
             time_series_channels
-        ) for dilation in dilations]
+        ) for dilation in self.dilations]
         return res_blocks
 
     def forward(self, x, condition, skip_size, time_series=None):
         output = x
         res_sum = 0
-        for res_block in self.res_blocks:
+        for res_block, dilation in zip(self.res_blocks, self.dilations):
+            time_series = time_series[:, :, dilation:]
             output, skip = res_block(output, condition, skip_size, time_series)
             res_sum += skip
             del skip

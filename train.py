@@ -47,10 +47,10 @@ class Trainer():
 
     def run(self):
         for epoch in tqdm(range(self.args.num_epochs)):
-            for i, (sample, real, diff, condition) in enumerate(tqdm(self.train_data_loader, total=self.train_data_loader.__len__())):
+            for i, (x, real, diff, condition) in enumerate(tqdm(self.train_data_loader, total=self.train_data_loader.__len__())):
                 step = i + epoch * self.train_data_loader.__len__()
                 self.wavenet.train(
-                    sample.cuda(non_blocking=True), 
+                    x.cuda(non_blocking=True), 
                     real.cuda(non_blocking=True), 
                     diff.cuda(non_blocking=True), 
                     condition.cuda(non_blocking=True), 
@@ -58,9 +58,9 @@ class Trainer():
                 )
             with torch.no_grad():
                 train_loss_large = train_loss_small = 0
-                for _, (sample, real, diff, condition) in enumerate(tqdm(self.test_data_loader, total=self.test_data_loader.__len__())):
+                for _, (x, real, diff, condition) in enumerate(tqdm(self.test_data_loader, total=self.test_data_loader.__len__())):
                     current_large_loss, current_small_loss = self.wavenet.train(
-                        sample.cuda(non_blocking=True), 
+                        x.cuda(non_blocking=True), 
                         real.cuda(non_blocking=True), 
                         diff.cuda(non_blocking=True), 
                         condition.cuda(non_blocking=True), 
@@ -97,21 +97,21 @@ if __name__ == '__main__':
     parser.add_argument('--layer_size', type=int, default=10)
     parser.add_argument('--stack_size', type=int, default=5)
     parser.add_argument('--channels', type=int, default=326)
-    parser.add_argument('--residual_channels', type=int, default=256)
+    parser.add_argument('--residual_channels', type=int, default=512)
     parser.add_argument('--dilation_channels', type=int, default=512)
     parser.add_argument('--skip_channels', type=int, default=512)
     parser.add_argument('--end_channels', type=int, default=512)
     parser.add_argument('--out_channels', type=int, default=326)
     parser.add_argument('--condition_channels', type=int, default=6)
-    parser.add_argument('--time_series_channels', type=int, default=6)
+    parser.add_argument('--time_series_channels', type=int, default=7)
     parser.add_argument('--layer_size_small', type=int, default=10)
     parser.add_argument('--stack_size_small', type=int, default=5)
     parser.add_argument('--channels_small', type=int, default=326)
-    parser.add_argument('--residual_channels_small', type=int, default=16)
+    parser.add_argument('--residual_channels_small', type=int, default=32)
     parser.add_argument('--dilation_channels_small', type=int, default=32)
     parser.add_argument('--skip_channels_small', type=int, default=32)
-    parser.add_argument('--end_channels_small', type=int, default=32)
-    parser.add_argument('--out_channels_small', type=int, default=6)
+    parser.add_argument('--end_channels_small', type=int, default=64)
+    parser.add_argument('--out_channels_small', type=int, default=7)
     parser.add_argument('--condition_channels_small', type=int, default=6)
     parser.add_argument('--num_epochs', type=int, default=10000)
     parser.add_argument('--learning_rate', type=float, default=0.0002)

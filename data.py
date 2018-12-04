@@ -47,10 +47,11 @@ def piano_roll(path, receptive_field):
         data[-1, length - INPUT_LENGTH:] = 1
     data = data > 0
     answer = np.transpose(data[:, receptive_field + 1:], axes=(1, 0))
-    diff = np.zeros((6, INPUT_LENGTH - 1))
+    diff = np.zeros((7, INPUT_LENGTH - 1))
     for i in range(len(limit_slice) - 1):
-        diff[i] += np.sum(np.diff(data[limit_slice[i]:limit_slice[i + 1]]), axis=0) > 0
-    diff = np.transpose(diff, axes=(1, 0))
+        diff[i] += np.sum(np.diff(data[limit_slice[i]:limit_slice[i + 1]]), axis=0)
+    diff[-1] += 1 - np.sum(diff[:-1], axis=0)
+    diff = np.transpose(diff, axes=(1, 0)) > 0
     diff = np.ascontiguousarray(diff)
     return data[:, :-1].astype(np.float32), answer.astype(np.float32), diff.astype(np.float32), condition.astype(np.float32)
 
@@ -107,7 +108,7 @@ class Dataset(data.Dataset):
         else:
             self.pathlist = testlist
         self.receptive_field = receptive_field
-    
+
     def __getitem__(self, index):
         data = piano_roll(self.pathlist[index], self.receptive_field)
         return data
@@ -122,11 +123,12 @@ class DataLoader(data.DataLoader):
 def Test():
     pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
     np.random.shuffle(pathlist)
-    total = on = 0
+    total = 0
+    on = np.zeros(7)
     for i, path in enumerate(tqdm(pathlist)):
         *_, diff, _ = piano_roll(path, 5115)
         total += diff.shape[0]
-        on += np.sum(diff)
+        on += np.sum(diff, axis=0)
         if i % 20 == 19:
             tqdm.write(str(total / on))
 

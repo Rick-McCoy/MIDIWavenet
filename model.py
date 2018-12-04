@@ -40,13 +40,28 @@ class Wavenet:
         self.out_channels = args.out_channels
         self.learning_rate = args.learning_rate
         self.sigmoid = torch.nn.Sigmoid()
-        self.loss = self._loss()
+        self.large_loss = self._large_loss()
+        self.small_loss = self._small_loss()
         self.optimizer = self._optimizer()
         self.writer = writer
         self.total = 0
     
-    def _loss(self):
-        loss = torch.nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([48.5]).cuda(non_blocking=True))
+    def _small_loss(self):
+        loss = torch.nn.BCEWithLogitsLoss(
+            pos_weight=torch.cuda.FloatTensor([ # pylint: disable=E1101
+                6.07501087e+01, 
+                2.43404231e+02, 
+                5.06094867e+02, 
+                1.42857687e+03, 
+                6.30166071e+02, 
+                9.81309299e+02, 
+                1.02464796e+00
+            ])
+        )
+        return loss
+
+    def _large_loss(self):
+        loss = torch.nn.BCEWithLogitsLoss()
         return loss
 
     def _optimizer(self):
@@ -65,13 +80,13 @@ class Wavenet:
         diff = diff[:, -output.shape[1]:]
         writer_mask = mask[:1].sigmoid_()
         writer_diff = diff[:1]
-        mask = mask.reshape(-1, 6)
-        diff = diff.reshape(-1, 6)
+        mask = mask.reshape(-1, mask.shape[-1])
+        diff = diff.reshape(-1, diff.shape[-1])
         indices = diff.sum(dim=1).nonzero()
         masked_output = output.reshape(-1, self.out_channels)[indices]
         masked_real = real.reshape(-1, self.out_channels)[indices]
-        loss_large = self.loss(masked_output, masked_real)
-        loss_small = self.loss(mask, diff)
+        loss_large = self.large_loss(masked_output, masked_real)
+        loss_small = self.small_loss(mask, diff)
         loss = loss_large + loss_small
         self.optimizer.zero_grad()
         if train:
@@ -104,7 +119,7 @@ class Wavenet:
         output = torch.zeros([1, self.channels, self.receptive_field + 2]).cuda(non_blocking=True) # pylint: disable=E1101
         output[:, 324] = 1
         if condition is None:
-            condition = torch.randint(2, size=(6,)).cuda(non_blocking=True) # pylint: disable=E1101
+            condition = torch.randint(2, size=(7,)).cuda(non_blocking=True) # pylint: disable=E1101
         for i, j in enumerate(condition):
             if j:
                 for _ in range(np.random.randint(0, 4)):
@@ -125,10 +140,11 @@ class Wavenet:
         self.small_net.module.fill_queues(init, condition)
         x = init[:, :, -2:]
         for _ in tqdm(range(length)):
-            cont = torch.cuda.FloatTensor(1, 6, 1).uniform_() < self.small_net.module.sample_forward(x[:, :, -2:], condition) # pylint: disable=E1101
+            cont = self.small_net.module.sample_forward(x[:, :, -2:], condition)
+            cont = torch.cuda.FloatTensor(cont.shape).uniform_() < cont # pylint: disable=E1101
             cont = cont.to(torch.float32) # pylint: disable=E1101
             diff = torch.cat((diff, cont), dim=-1) # pylint: disable=E1101
-            if cont.sum() == 0:
+            if cont.squeeze()[-1].item() > torch.cuda.FloatTensor([1]).uniform_(): # pylint: disable=E1101
                 output = torch.cat((output, x[0, :, -1:]), dim=-1) # pylint: disable=E1101
                 x = torch.cat((x, x[:, :, -1:]), dim=-1) # pylint: disable=E1101
                 continue
