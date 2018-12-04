@@ -10,7 +10,7 @@ from tqdm import tqdm
 from model import Wavenet
 from data import DataLoader, natural_sort_key
 from tensorboardX import SummaryWriter
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1, 2, 3"
 
 class Trainer():
     def __init__(self, args):
@@ -47,26 +47,50 @@ class Trainer():
 
     def run(self):
         for epoch in tqdm(range(self.args.num_epochs)):
-            for i, (sample, real, diff, condition) in tqdm(enumerate(self.train_data_loader), total=self.train_data_loader.__len__()):
+            for i, (sample, real, diff, condition) in enumerate(tqdm(self.train_data_loader, total=self.train_data_loader.__len__())):
                 step = i + epoch * self.train_data_loader.__len__()
-                self.wavenet.train(sample.cuda(), real.cuda(), diff.cuda(), condition.cuda(), step=step, train=True)
+                self.wavenet.train(
+                    sample.cuda(non_blocking=True), 
+                    real.cuda(non_blocking=True), 
+                    diff.cuda(non_blocking=True), 
+                    condition.cuda(non_blocking=True), 
+                    step=step, train=True
+                )
             with torch.no_grad():
-                train_loss = 0
-                for _, (sample, real, diff, condition) in tqdm(enumerate(self.test_data_loader), total=self.test_data_loader.__len__()):
-                    train_loss += self.wavenet.train(sample.cuda(), real.cuda(), diff.cuda(), condition.cuda(), train=False)
-                train_loss /= self.test_data_loader.__len__()
-                tqdm.write('Testing step Loss: {}'.format(train_loss))
+                train_loss_large = train_loss_small = 0
+                for _, (sample, real, diff, condition) in enumerate(tqdm(self.test_data_loader, total=self.test_data_loader.__len__())):
+                    current_large_loss, current_small_loss = self.wavenet.train(
+                        sample.cuda(non_blocking=True), 
+                        real.cuda(non_blocking=True), 
+                        diff.cuda(non_blocking=True), 
+                        condition.cuda(non_blocking=True), 
+                        train=False
+                    )
+                    train_loss_large += current_large_loss
+                    train_loss_small += current_small_loss
+                train_loss_large /= self.test_data_loader.__len__()
+                train_loss_small /= self.test_data_loader.__len__()
+                tqdm.write('Testing step Large Loss: {}'.format(train_loss_large))
+                tqdm.write('Testing step Small Loss: {}'.format(train_loss_small))
                 end_step = (epoch + 1) * self.train_data_loader.__len__()
-                sampled_image = self.sample(num=1, length=self.args.length, name=end_step)
-                self.test_writer.add_scalar('Testing loss', train_loss, end_step)
+                sampled_image = self.sample(num=1, name=end_step)
+                self.test_writer.add_scalar('Testing large loss', train_loss_large, end_step)
+                self.test_writer.add_scalar('Testing small loss', train_loss_small, end_step)
                 self.test_writer.add_image('Sampled', sampled_image, end_step)
                 self.wavenet.save(end_step)
 
-    def sample(self, num, length, name='Sample_{}'.format(int(time.time()))):
+    def sample(self, num, name='Sample_{}'.format(int(time.time()))):
         for _ in tqdm(range(num)):
-            sample_init, _, sample_condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
-            sampled_image = self.wavenet.sample(name, temperature=self.args.temperature, init=sample_init, condition=sample_condition, length=length)
-        return sampled_image
+            init, _, diff, condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
+            image = self.wavenet.sample(
+                name, 
+                temperature=self.args.temperature, 
+                init=torch.Tensor(init).cuda(non_blocking=True), 
+                diff=torch.Tensor(diff).cuda(non_blocking=True), 
+                condition=torch.Tensor(condition).cuda(non_blocking=True), 
+                length=self.args.length
+            )
+        return image
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -76,23 +100,24 @@ if __name__ == '__main__':
     parser.add_argument('--residual_channels', type=int, default=256)
     parser.add_argument('--dilation_channels', type=int, default=512)
     parser.add_argument('--skip_channels', type=int, default=512)
-    parser.add_argument('--end_channels', type=int, default=1024)
+    parser.add_argument('--end_channels', type=int, default=512)
     parser.add_argument('--out_channels', type=int, default=326)
     parser.add_argument('--condition_channels', type=int, default=6)
+    parser.add_argument('--time_series_channels', type=int, default=6)
     parser.add_argument('--layer_size_small', type=int, default=10)
     parser.add_argument('--stack_size_small', type=int, default=5)
     parser.add_argument('--channels_small', type=int, default=326)
-    parser.add_argument('--residual_channels_small', type=int, default=256)
-    parser.add_argument('--dilation_channels_small', type=int, default=512)
-    parser.add_argument('--skip_channels_small', type=int, default=512)
-    parser.add_argument('--end_channels_small', type=int, default=1024)
-    parser.add_argument('--out_channels_small', type=int, default=326)
+    parser.add_argument('--residual_channels_small', type=int, default=16)
+    parser.add_argument('--dilation_channels_small', type=int, default=32)
+    parser.add_argument('--skip_channels_small', type=int, default=32)
+    parser.add_argument('--end_channels_small', type=int, default=32)
+    parser.add_argument('--out_channels_small', type=int, default=6)
     parser.add_argument('--condition_channels_small', type=int, default=6)
     parser.add_argument('--num_epochs', type=int, default=10000)
     parser.add_argument('--learning_rate', type=float, default=0.0002)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--shuffle', type=bool, default=True)
-    parser.add_argument('--num_workers', type=int, default=16)
+    parser.add_argument('--num_workers', type=int, default=32)
     parser.add_argument('--sample', type=int, default=0)
     parser.add_argument('--length', type=int, default=2048)
     parser.add_argument('--resume', type=int, default=0)
@@ -106,6 +131,7 @@ if __name__ == '__main__':
     trainer = Trainer(args)
 
     if args.sample > 0:
-        trainer.sample(args.sample, args.length, args.resume)
+        with torch.no_grad():
+            trainer.sample(args.sample)
     else:
         trainer.run()

@@ -14,39 +14,13 @@ import torch.utils.data as data
 
 INPUT_LENGTH = 8192
 MAX_LENGTH = 32768
-pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid'))
+pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
+np.random.shuffle(pathlist)
 trainlist = pathlist[:-144]
 testlist = pathlist[-144:]
 
 def natural_sort_key(s, _nsre=re.compile('(\\d+)')):
     return [int(text) if text.isdigit() else text.lower() for text in _nsre.split(s)]
-
-def full_piano_roll(path, receptive_field):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        song = pm.PrettyMIDI(midi_file=str(path))
-    piano_rolls = [(_.get_piano_roll(fs=song.resolution), _.program) for _ in song.instruments if not _.is_drum]
-    drum_rolls = [(_.get_piano_roll(fs=song.resolution), _.program) for _ in song.instruments if _.is_drum]
-    length = np.amax([roll.shape[1] for roll, _ in piano_rolls + drum_rolls])
-    data = np.zeros(shape=(128 * 129 + 2, length))
-    condition = np.zeros(shape=(129, 1))
-    for roll, instrument in piano_rolls:
-        data[instrument * 128: (instrument + 1) * 128] += np.pad(roll, [(0, 0), (0, length - roll.shape[1])], 'constant')
-        condition[instrument] = 1
-    for roll, instrument in drum_rolls:
-        data[128 * 128 : 128 * 129] += np.pad(roll, [(0, 0), (0, length - roll.shape[1])], 'constant')
-        condition[-1] = 1
-    num = np.random.randint(0, length)
-    data = data[:, num:num + MAX_LENGTH]
-    data[-2] += 1 - data[:-2].sum(axis=0)
-    length = data.shape[1]
-    if length < MAX_LENGTH:
-        data = np.pad(data, [(0, 0), (0, MAX_LENGTH - length)], 'constant')
-        data[-1, length - MAX_LENGTH] = 1
-    data = data > 0
-    answer = np.transpose(data[:, receptive_field + 1:], (1, 0))
-    diff = np.sum(np.diff(data)[:, receptive_field:], axis=0, keepdims=True) > 0
-    return data.astype(np.float32), answer.astype(np.float32), diff.astype(np.float32), condition.astype(np.float32)
 
 def piano_roll(path, receptive_field):
     with warnings.catch_warnings():
@@ -57,24 +31,28 @@ def piano_roll(path, receptive_field):
     limit_slice = [0, 72, 120, 192, 240, 288, 324]
     piano_rolls = [(_.get_piano_roll(fs=song.resolution), _.program) for _ in song.instruments if not _.is_drum and _.program // 8 in classes]
     length = np.amax([roll.shape[1] for roll, _ in piano_rolls])
-    data_full = np.zeros(shape=(326, length))
+    data = np.zeros(shape=(326, length))
     condition = np.zeros(shape=(6, 1))
     for roll, instrument in piano_rolls:
         i = classes.index(instrument // 8)
         sliced_roll = roll[limits[i][0]:limits[i][1]]
-        data_full[limit_slice[i]:limit_slice[i + 1]] += np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
+        data[limit_slice[i]:limit_slice[i + 1]] += np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
         condition[i] = 1
     num = np.random.randint(0, length)
-    data = data_full[:, num : INPUT_LENGTH + num]
+    data = data[:, num : INPUT_LENGTH + num]
     data[324] += 1 - data[:324].sum(axis = 0)
     length = data.shape[1]
     if length < INPUT_LENGTH:
         data = np.pad(data, [(0, 0), (0, INPUT_LENGTH - length)], 'constant')
-        data[325, length - INPUT_LENGTH:] = 1
+        data[-1, length - INPUT_LENGTH:] = 1
     data = data > 0
     answer = np.transpose(data[:, receptive_field + 1:], axes=(1, 0))
-    diff = np.sum(np.diff(data)[:, receptive_field:], axis=0, keepdims=True) > 0
-    return data.astype(np.float32), answer.astype(np.float32), diff.astype(np.float32), condition.astype(np.float32)
+    diff = np.zeros((6, INPUT_LENGTH - 1))
+    for i in range(len(limit_slice) - 1):
+        diff[i] += np.sum(np.diff(data[limit_slice[i]:limit_slice[i + 1]]), axis=0) > 0
+    diff = np.transpose(diff, axes=(1, 0))
+    diff = np.ascontiguousarray(diff)
+    return data[:, :-1].astype(np.float32), answer.astype(np.float32), diff.astype(np.float32), condition.astype(np.float32)
 
 def clean(x):
     return x[:-2]
@@ -139,16 +117,18 @@ class Dataset(data.Dataset):
 
 class DataLoader(data.DataLoader):
     def __init__(self, batch_size, receptive_field, shuffle=True, num_workers=16, train=True):
-        super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers)
+        super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers, pin_memory=True)
 
 def Test():
-    pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid'))
-    for path in tqdm(pathlist[:1]):
-        data, answer, diff, condition = piano_roll(path, 5115)
-        tqdm.write(str(data.shape))
-        tqdm.write(str(answer.shape))
-        tqdm.write(str(diff.shape))
-        tqdm.write(str(condition.shape))
+    pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
+    np.random.shuffle(pathlist)
+    total = on = 0
+    for i, path in enumerate(tqdm(pathlist)):
+        *_, diff, _ = piano_roll(path, 5115)
+        total += diff.shape[0]
+        on += np.sum(diff)
+        if i % 20 == 19:
+            tqdm.write(str(total / on))
 
 if __name__ == '__main__':
     Test()

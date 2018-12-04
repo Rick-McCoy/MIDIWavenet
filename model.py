@@ -5,7 +5,7 @@ import torch.optim
 import numpy as np
 import pretty_midi as pm
 from tqdm import tqdm
-from data import INPUT_LENGTH, clean, piano_rolls_to_midi, save_roll
+from data import clean, piano_rolls_to_midi, save_roll
 from network import Wavenet as WavenetModule
 
 class Wavenet:
@@ -19,7 +19,8 @@ class Wavenet:
             args.skip_channels, 
             args.end_channels, 
             args.out_channels, 
-            args.condition_channels
+            args.condition_channels, 
+            args.time_series_channels
         )
         self.small_net = WavenetModule(
             args.layer_size_small, 
@@ -30,7 +31,8 @@ class Wavenet:
             args.skip_channels_small, 
             args.end_channels_small, 
             args.out_channels_small, 
-            args.condition_channels_small
+            args.condition_channels_small, 
+            0
         )
         self.receptive_field = self.large_net.receptive_field
         self._prepare_for_gpu()
@@ -44,7 +46,7 @@ class Wavenet:
         self.total = 0
     
     def _loss(self):
-        loss = torch.nn.BCELoss()
+        loss = torch.nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([48.5]).cuda(non_blocking=True))
         return loss
 
     def _optimizer(self):
@@ -58,12 +60,16 @@ class Wavenet:
             self.small_net = torch.nn.DataParallel(self.small_net)
 
     def train(self, x, real, diff, condition, step=1, train=True):
-        mask = self.small_net(x, condition).transpose(1, 2)[:, :-1, :]
-        output = self.large_net(x, condition).transpose(1, 2)[:, :-1, :]
-        masked_output = output * diff
-        masked_real = real * diff
-        masked_output = masked_output.reshape(-1, self.out_channels)
-        masked_real = masked_real.reshape(-1, self.out_channels)
+        mask = self.small_net(x, condition).transpose(1, 2)
+        output = self.large_net(x, condition, diff.transpose(1, 2)).transpose(1, 2)
+        diff = diff[:, -output.shape[1]:]
+        writer_mask = mask[:1].sigmoid_()
+        writer_diff = diff[:1]
+        mask = mask.reshape(-1, 6)
+        diff = diff.reshape(-1, 6)
+        indices = diff.sum(dim=1).nonzero()
+        masked_output = output.reshape(-1, self.out_channels)[indices]
+        masked_real = real.reshape(-1, self.out_channels)[indices]
         loss_large = self.loss(masked_output, masked_real)
         loss_small = self.loss(mask, diff)
         loss = loss_large + loss_small
@@ -72,17 +78,19 @@ class Wavenet:
             loss.backward()
             self.optimizer.step()
             if step % 20 == 19:
-                tqdm.write('Training step {}/{} Loss: {}'.format(step, self.total, loss))
-                self.writer.add_scalar('Training loss', loss.item(), step)
+                tqdm.write('Training step {}/{} Large loss: {}, Small loss: {}'.format(step, self.total, loss_large.item(), loss_small.item()))
+                self.writer.add_scalar('Large loss', loss_large.item(), step)
+                self.writer.add_scalar('Small loss', loss_small.item(), step)
                 self.writer.add_image('Real', real[:1], step)
-                self.writer.add_image('Generated', output[:1], step)
-        else:
-            return loss.item()
+                self.writer.add_image('Generated', output[:1].sigmoid_(), step)
+                self.writer.add_image('Mask', writer_mask, step)
+                self.writer.add_image('Diff', writer_diff, step)
+        return loss_large.item(), loss_small.item()
 
-    def sample(self, step, temperature=1., init=None, condition=None, length=2048):
+    def sample(self, step, temperature=1., init=None, diff=None, condition=None, length=2048):
         if not os.path.isdir('Samples'):
             os.mkdir('Samples')
-        roll = self.generate(temperature, init, condition, length)
+        roll = self.generate(temperature, init, diff, condition, length).detach().cpu().numpy()
         roll = clean(roll)
         save_roll(roll, step)
         midi = piano_rolls_to_midi(roll)
@@ -93,43 +101,49 @@ class Wavenet:
 
     def gen_init(self, condition=None):
         channels = [0, 72, 120, 192, 240, 288, 324]
-        output = np.zeros([1, self.channels, self.receptive_field + 2])
+        output = torch.zeros([1, self.channels, self.receptive_field + 2]).cuda(non_blocking=True) # pylint: disable=E1101
         output[:, 324] = 1
         if condition is None:
-            condition = np.random.randint(2, size=(6))
-        output[:, condition[:, 0] > 0] = 1
+            condition = torch.randint(2, size=(6,)).cuda(non_blocking=True) # pylint: disable=E1101
         for i, j in enumerate(condition):
             if j:
-                output[:, 324 + j] = 1
                 for _ in range(np.random.randint(0, 4)):
                     output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
-        return output
+        diff = torch.cat((output[:, :, 0:], output[:, :, -1:])) != output # pylint: disable=E1101
+        return output, diff.to(torch.float32), condition # pylint: disable=E1101
 
-    def generate(self, temperature=1., init=None, condition=None, length=2048):
+    def generate(self, temperature=1., init=None, diff=None, condition=None, length=2048):
         if init is None:
-            init = self.gen_init(condition)
+            init, diff, condition = self.gen_init(condition)
         else:
-            init = np.expand_dims(init, axis=0)
-            condition = np.expand_dims(condition, axis=0)
-        init = init[:, :, :self.receptive_field + 2] # pylint: disable=E1130
-        output = np.zeros((self.out_channels, 1))
-        self.large_net.module.fill_queues(torch.Tensor(init).cuda(), torch.Tensor(condition).cuda())
-        self.small_net.module.fill_queues(torch.Tensor(init).cuda(), torch.Tensor(condition).cuda())
+            init.unsqueeze_(dim=0)
+            diff = diff.unsqueeze_(dim=0).transpose(1, 2)
+            condition.unsqueeze_(dim=0)
+        init = init[:, :, :self.receptive_field + 2]
+        output = torch.zeros((self.out_channels, 1)).cuda(non_blocking=True) # pylint: disable=E1101
+        self.large_net.module.fill_queues(init, condition, diff)
+        self.small_net.module.fill_queues(init, condition)
         x = init[:, :, -2:]
         for _ in tqdm(range(length)):
-            cont = self.small_net.module.sample_forward(torch.Tensor(x).cuda(), torch.Tensor(condition).cuda()).detach().cpu().numpy()
-            if np.random.rand(1, 1, 1) > cont:
-                output = np.concatenate((output, x[0, :, -1]), axis=1)
-                x = np.concatenate((x, x[:, :, -1:]), axis=2)
+            cont = torch.cuda.FloatTensor(1, 6, 1).uniform_() < self.small_net.module.sample_forward(x[:, :, -2:], condition) # pylint: disable=E1101
+            cont = cont.to(torch.float32) # pylint: disable=E1101
+            diff = torch.cat((diff, cont), dim=-1) # pylint: disable=E1101
+            if cont.sum() == 0:
+                output = torch.cat((output, x[0, :, -1:]), dim=-1) # pylint: disable=E1101
+                x = torch.cat((x, x[:, :, -1:]), dim=-1) # pylint: disable=E1101
                 continue
-            nxt = self.large_net.module.sample_forward(torch.Tensor(x).cuda(), torch.Tensor(condition).cuda()).detach().cpu().numpy()
+            diff = diff[:, :, 1 - x.shape[2]:]
+            nxt = self.large_net.module.sample_forward(x, condition, diff)
             if temperature != 1:
-                nxt = np.power(nxt + 0.5, temperature) - 0.5
-            nxt = nxt > np.random.rand(1, self.out_channels, 1)
-            nxt = nxt.astype(np.float32)
-            output = np.concatenate((output, nxt[0]), axis=1)
-            x = np.concatenate((x, nxt), axis=2)
+                nxt += 0.5
+                nxt.pow(temperature)
+                nxt -= 0.5
+            nxt = nxt > torch.cuda.FloatTensor(self.out_channels).uniform_() # pylint: disable=E1101
+            nxt = nxt.to(torch.float32) # pylint: disable=E1101
+            output = torch.cat((output, nxt[0]), dim=-1) # pylint: disable=E1101
+            x = torch.cat((x, nxt), dim=-1) # pylint: disable=E1101
             x = x[:, :, -2:]
+            del cont, nxt
         return output[:, -length:]
 
     def save(self, step):
