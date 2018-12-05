@@ -121,8 +121,6 @@ class DataLoader(data.DataLoader):
         super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers, pin_memory=True)
 
 def Test():
-    pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
-    np.random.shuffle(pathlist)
     total = 0
     on = np.zeros(7)
     for i, path in enumerate(tqdm(pathlist)):

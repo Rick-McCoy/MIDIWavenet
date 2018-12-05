@@ -77,6 +77,7 @@ class ResidualStack(torch.nn.Module):
         super(ResidualStack, self).__init__()
         self.layer_size = layer_size
         self.stack_size = stack_size
+        self.dilations = [2 ** i for i in range(self.layer_size)] * self.stack_size
         self.res_blocks = torch.nn.ModuleList(
             self.stack_res_blocks(
                 residual_channels, 
@@ -86,7 +87,6 @@ class ResidualStack(torch.nn.Module):
                 time_series_channels
             )
         )
-        self.dilations = [2 ** i for i in range(self.layer_size)] * self.stack_size
 
     def stack_res_blocks(self, residual_channels, dilation_channels, skip_channels, condition_channels, time_series_channels):
         res_blocks = [ResidualBlock(
@@ -103,7 +103,8 @@ class ResidualStack(torch.nn.Module):
         output = x
         res_sum = 0
         for res_block, dilation in zip(self.res_blocks, self.dilations):
-            time_series = time_series[:, :, dilation:]
+            if time_series is not None:
+                time_series = time_series[:, :, dilation:]
             output, skip = res_block(output, condition, skip_size, time_series)
             res_sum += skip
             del skip
@@ -129,7 +130,9 @@ class ResidualStack(torch.nn.Module):
         return res_sum
 
     def fill_queues(self, x, condition, time_series=None):
-        for res_block in self.res_blocks:
+        for res_block, dilation in zip(self.res_blocks, self.dilations):
+            if time_series is not None:
+                time_series = time_series[:, :, dilation:]
             with res_block.queue.mutex:
                 res_block.queue.queue.clear()
             for i in range(-res_block.dilation - 1, -1):

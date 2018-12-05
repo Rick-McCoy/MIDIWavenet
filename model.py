@@ -135,6 +135,7 @@ class Wavenet:
             diff = diff.unsqueeze_(dim=0).transpose(1, 2)
             condition.unsqueeze_(dim=0)
         init = init[:, :, :self.receptive_field + 2]
+        diff = diff[:, :, :self.receptive_field + 2]
         output = torch.zeros((self.out_channels, 1)).cuda(non_blocking=True) # pylint: disable=E1101
         self.large_net.module.fill_queues(init, condition, diff)
         self.small_net.module.fill_queues(init, condition)
