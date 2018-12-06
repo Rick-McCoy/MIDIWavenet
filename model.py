@@ -87,10 +87,10 @@ class Wavenet:
         masked_real = real.reshape(-1, self.out_channels)[indices]
         loss_large = self.large_loss(masked_output, masked_real)
         loss_small = self.small_loss(mask, diff)
-        loss = loss_large + loss_small
-        self.optimizer.zero_grad()
         if train:
-            loss.backward()
+            self.optimizer.zero_grad()
+            loss_large.backward()
+            loss_small.backward()
             self.optimizer.step()
             if step % 20 == 19:
                 tqdm.write('Training step {}/{} Large loss: {}, Small loss: {}'.format(step, self.total, loss_large.item(), loss_small.item()))

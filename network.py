@@ -1,6 +1,7 @@
 import torch
 import queue
 import numpy as np
+from torch.utils.checkpoint import checkpoint
 
 class CausalConv1d(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -39,8 +40,9 @@ class ResidualBlock(torch.nn.Module):
         if time_series_channels > 0:
             self.time_filter_conv = torch.nn.Conv1d(time_series_channels, dilation_channels, 1)
             self.time_gate_conv = torch.nn.Conv1d(time_series_channels, dilation_channels, 1)
+        self.skip_size = 1
 
-    def forward(self, x, condition, skip_size, time_series=None, sample=False):
+    def forward(self, x, condition, time_series=None, sample=False):
         dilated_filter = self.filter_conv(x, sample)
         dilated_gate = self.gate_conv(x, sample)
         conditional_filter = self.conditional_filter_conv(condition)
@@ -60,7 +62,7 @@ class ResidualBlock(torch.nn.Module):
         output = self.residual_conv(dilated)
         output += x[:, :, -output.shape[2]:]
 
-        skip = self.skip_conv(dilated)[:, :, -skip_size:]
+        skip = self.skip_conv(dilated)[:, :, -self.skip_size:]
         return output, skip
 
 class ResidualStack(torch.nn.Module):
@@ -103,9 +105,10 @@ class ResidualStack(torch.nn.Module):
         output = x
         res_sum = 0
         for res_block, dilation in zip(self.res_blocks, self.dilations):
+            res_block.skip_size = skip_size
             if time_series is not None:
                 time_series = time_series[:, :, dilation:]
-            output, skip = res_block(output, condition, skip_size, time_series)
+            output, skip = checkpoint(res_block, output, condition, time_series)
             res_sum += skip
             del skip
         return res_sum
@@ -114,6 +117,7 @@ class ResidualStack(torch.nn.Module):
         output = x
         res_sum = 0
         for res_block in self.res_blocks:
+            res_block.skip_size = 1
             for i in range(output.shape[2]):
                 top = res_block.queue.get()
                 current = output[:, :, i].unsqueeze(dim=-1)
@@ -123,7 +127,7 @@ class ResidualStack(torch.nn.Module):
                     current_time = time_series[:, :, i].unsqueeze(dim=-1)
                 else:
                     current_time = None
-                current, skip = res_block(full, condition, 1, current_time, sample=True)
+                current, skip = res_block(full, condition, current_time, sample=True)
                 output[:, :, i] = current.squeeze(dim=-1)
             res_sum += skip
             del skip, top, full
