@@ -123,7 +123,7 @@ class DataLoader(data.DataLoader):
 def Test():
     total = 0
     on = np.zeros(7)
-    for i, path in enumerate(tqdm(pathlist)):
+    for i, path in enumerate(tqdm(pathlist), dynamic_ncols=True):
         *_, diff, _ = piano_roll(path, 5115)
         total += diff.shape[0]
         on += np.sum(diff, axis=0)

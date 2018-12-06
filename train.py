@@ -47,7 +47,7 @@ class Trainer():
 
     def run(self):
         for epoch in tqdm(range(self.args.num_epochs)):
-            for i, (x, real, diff, condition) in enumerate(tqdm(self.train_data_loader, total=self.train_data_loader.__len__())):
+            for i, (x, real, diff, condition) in enumerate(tqdm(self.train_data_loader, total=self.train_data_loader.__len__(), dynamic_ncols=True)):
                 step = i + epoch * self.train_data_loader.__len__()
                 self.wavenet.train(
                     x.cuda(non_blocking=True), 
@@ -58,7 +58,7 @@ class Trainer():
                 )
             with torch.no_grad():
                 train_loss_large = train_loss_small = 0
-                for _, (x, real, diff, condition) in enumerate(tqdm(self.test_data_loader, total=self.test_data_loader.__len__())):
+                for _, (x, real, diff, condition) in enumerate(tqdm(self.test_data_loader, total=self.test_data_loader.__len__(), dynamic_ncols=True)):
                     current_large_loss, current_small_loss = self.wavenet.train(
                         x.cuda(non_blocking=True), 
                         real.cuda(non_blocking=True), 
@@ -80,7 +80,7 @@ class Trainer():
                 self.wavenet.save(end_step)
 
     def sample(self, num, name='Sample_{}'.format(int(time.time()))):
-        for _ in tqdm(range(num)):
+        for _ in tqdm(range(num), dynamic_ncols=True):
             init, _, diff, condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
             image = self.wavenet.sample(
                 name, 

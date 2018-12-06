@@ -140,7 +140,7 @@ class Wavenet:
         self.large_net.module.fill_queues(init, condition, diff)
         self.small_net.module.fill_queues(init, condition)
         x = init[:, :, -2:]
-        for _ in tqdm(range(length)):
+        for _ in tqdm(range(length), dynamic_ncols=True):
             cont = self.small_net.module.sample_forward(x[:, :, -2:], condition)
             cont = torch.cuda.FloatTensor(cont.shape).uniform_() < cont # pylint: disable=E1101
             cont = cont.to(torch.float32) # pylint: disable=E1101
