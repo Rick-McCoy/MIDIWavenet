@@ -10,7 +10,7 @@ from tqdm import tqdm
 from model import Wavenet
 from data import DataLoader, natural_sort_key
 from tensorboardX import SummaryWriter
-os.environ['CUDA_VISIBLE_DEVICES'] = "1, 2, 3"
+#os.environ['CUDA_VISIBLE_DEVICES'] = "1, 2, 3"
 
 class Trainer():
     def __init__(self, args):
@@ -50,20 +50,20 @@ class Trainer():
             for i, (x, real, diff, condition) in enumerate(tqdm(self.train_data_loader, total=self.train_data_loader.__len__(), dynamic_ncols=True)):
                 step = i + epoch * self.train_data_loader.__len__()
                 self.wavenet.train(
-                    x.cuda(non_blocking=True), 
-                    real.cuda(non_blocking=True), 
-                    diff.cuda(non_blocking=True), 
-                    condition.cuda(non_blocking=True), 
+                    x.cuda(), 
+                    real.cuda(), 
+                    diff.cuda(), 
+                    condition.cuda(), 
                     step=step, train=True
                 )
             with torch.no_grad():
                 train_loss_large = train_loss_small = 0
                 for _, (x, real, diff, condition) in enumerate(tqdm(self.test_data_loader, total=self.test_data_loader.__len__(), dynamic_ncols=True)):
                     current_large_loss, current_small_loss = self.wavenet.train(
-                        x.cuda(non_blocking=True), 
-                        real.cuda(non_blocking=True), 
-                        diff.cuda(non_blocking=True), 
-                        condition.cuda(non_blocking=True), 
+                        x.cuda(), 
+                        real.cuda(), 
+                        diff.cuda(), 
+                        condition.cuda(), 
                         train=False
                     )
                     train_loss_large += current_large_loss
@@ -85,39 +85,37 @@ class Trainer():
             image = self.wavenet.sample(
                 name, 
                 temperature=self.args.temperature, 
-                init=torch.Tensor(init).cuda(non_blocking=True), 
-                diff=torch.Tensor(diff).cuda(non_blocking=True), 
-                condition=torch.Tensor(condition).cuda(non_blocking=True), 
+                init=torch.Tensor(init).cuda(), 
+                diff=torch.Tensor(diff).cuda(), 
+                condition=torch.Tensor(condition).cuda(), 
                 length=self.args.length
             )
         return image
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--layer_size', type=int, default=10)
+    parser.add_argument('--layer_size', type=int, default=11)
     parser.add_argument('--stack_size', type=int, default=5)
     parser.add_argument('--channels', type=int, default=326)
-    parser.add_argument('--residual_channels', type=int, default=512)
-    parser.add_argument('--dilation_channels', type=int, default=512)
+    parser.add_argument('--residual_channels', type=int, default=128)
+    parser.add_argument('--dilation_channels', type=int, default=128)
     parser.add_argument('--skip_channels', type=int, default=512)
     parser.add_argument('--end_channels', type=int, default=512)
     parser.add_argument('--out_channels', type=int, default=326)
     parser.add_argument('--condition_channels', type=int, default=6)
     parser.add_argument('--time_series_channels', type=int, default=7)
-    parser.add_argument('--layer_size_small', type=int, default=10)
-    parser.add_argument('--stack_size_small', type=int, default=5)
     parser.add_argument('--channels_small', type=int, default=326)
-    parser.add_argument('--residual_channels_small', type=int, default=32)
-    parser.add_argument('--dilation_channels_small', type=int, default=32)
-    parser.add_argument('--skip_channels_small', type=int, default=32)
-    parser.add_argument('--end_channels_small', type=int, default=64)
+    parser.add_argument('--residual_channels_small', type=int, default=64)
+    parser.add_argument('--dilation_channels_small', type=int, default=64)
+    parser.add_argument('--skip_channels_small', type=int, default=64)
+    parser.add_argument('--end_channels_small', type=int, default=32)
     parser.add_argument('--out_channels_small', type=int, default=7)
     parser.add_argument('--condition_channels_small', type=int, default=6)
     parser.add_argument('--num_epochs', type=int, default=10000)
     parser.add_argument('--learning_rate', type=float, default=0.0002)
-    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--batch_size', type=int, default=12)
     parser.add_argument('--shuffle', type=bool, default=True)
-    parser.add_argument('--num_workers', type=int, default=32)
+    parser.add_argument('--num_workers', type=int, default=20)
     parser.add_argument('--sample', type=int, default=0)
     parser.add_argument('--length', type=int, default=2048)
     parser.add_argument('--resume', type=int, default=0)

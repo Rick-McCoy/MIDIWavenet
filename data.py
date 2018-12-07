@@ -12,7 +12,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import torch.utils.data as data
 
-INPUT_LENGTH = 8192
+INPUT_LENGTH = 16384
 MAX_LENGTH = 32768
 pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
 np.random.shuffle(pathlist)
@@ -33,9 +33,10 @@ def piano_roll(path, receptive_field):
     length = np.amax([roll.shape[1] for roll, _ in piano_rolls])
     data = np.zeros(shape=(326, length))
     condition = np.zeros(shape=(6, 1))
+    shift = np.random.randint(-2, 3)
     for roll, instrument in piano_rolls:
         i = classes.index(instrument // 8)
-        sliced_roll = roll[limits[i][0]:limits[i][1]]
+        sliced_roll = roll[limits[i][0]+shift:limits[i][1]+shift]
         data[limit_slice[i]:limit_slice[i + 1]] += np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
         condition[i] = 1
     num = np.random.randint(0, length)
@@ -43,8 +44,8 @@ def piano_roll(path, receptive_field):
     data[324] += 1 - data[:324].sum(axis = 0)
     length = data.shape[1]
     if length < INPUT_LENGTH:
-        data = np.pad(data, [(0, 0), (0, INPUT_LENGTH - length)], 'constant')
-        data[-1, length - INPUT_LENGTH:] = 1
+        data = np.pad(data, [(0, 0), (INPUT_LENGTH - length, 0)], 'constant')
+        data[-1, 0:INPUT_LENGTH - length] = 1
     data = data > 0
     answer = np.transpose(data[:, receptive_field + 1:], axes=(1, 0))
     diff = np.zeros((7, INPUT_LENGTH - 1))
@@ -118,7 +119,7 @@ class Dataset(data.Dataset):
 
 class DataLoader(data.DataLoader):
     def __init__(self, batch_size, receptive_field, shuffle=True, num_workers=16, train=True):
-        super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers, pin_memory=True)
+        super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers)
 
 def Test():
     total = 0
