@@ -23,8 +23,8 @@ class Wavenet:
             args.time_series_channels
         )
         self.small_net = WavenetModule(
-            args.layer_size, 
-            args.stack_size, 
+            args.layer_size_small, 
+            args.stack_size_small, 
             args.channels_small, 
             args.residual_channels_small, 
             args.dilation_channels_small, 
@@ -34,29 +34,30 @@ class Wavenet:
             args.condition_channels_small, 
             0
         )
-        self.receptive_field = self.large_net.receptive_field
+        self.large_receptive_field = self.large_net.receptive_field
+        self.small_receptive_field = self.small_net.receptive_field
         self._prepare_for_gpu()
         self.channels = args.channels
         self.out_channels = args.out_channels
         self.learning_rate = args.learning_rate
-        self.sigmoid = torch.nn.Sigmoid()
         self.large_loss = self._large_loss()
         self.small_loss = self._small_loss()
-        self.optimizer = self._optimizer()
+        self.optimizer_large = self._optimizer_large()
+        self.optimizer_small = self._optimizer_small()
         self.writer = writer
         self.total = 0
     
     def _small_loss(self):
         loss = torch.nn.BCEWithLogitsLoss(
-            pos_weight=torch.cuda.FloatTensor([ # pylint: disable=E1101
-                6.07501087e+01, 
-                2.43404231e+02, 
-                5.06094867e+02, 
-                1.42857687e+03, 
-                6.30166071e+02, 
-                9.81309299e+02, 
-                1.02464796e+00
-            ])
+            # pos_weight=torch.cuda.FloatTensor([ # pylint: disable=E1101
+            #     6.07501087e+01, 
+            #     2.43404231e+02, 
+            #     5.06094867e+02, 
+            #     1.42857687e+03, 
+            #     6.30166071e+02, 
+            #     9.81309299e+02, 
+            #     1.02464796e+00
+            # ])
         )
         return loss
 
@@ -64,9 +65,12 @@ class Wavenet:
         loss = torch.nn.BCEWithLogitsLoss()
         return loss
 
-    def _optimizer(self):
-        return torch.optim.Adam(itertools.chain(self.large_net.parameters(), self.small_net.parameters()), lr=self.learning_rate)
-    
+    def _optimizer_large(self):
+        return torch.optim.Adam(self.large_net.parameters(), lr=self.learning_rate)
+
+    def _optimizer_small(self):
+        return torch.optim.Adam(self.small_net.parameters(), lr=self.learning_rate)
+
     def _prepare_for_gpu(self):
         if torch.cuda.is_available():
             self.large_net.cuda()
@@ -74,41 +78,38 @@ class Wavenet:
             self.small_net.cuda()
             self.small_net = torch.nn.DataParallel(self.small_net)
 
-    def train(self, x, real, diff, condition, step=1, train=True):
-        mask = self.small_net(x, condition).transpose(1, 2)
-        output = self.large_net(x, condition, diff.transpose(1, 2)).transpose(1, 2)
-        diff = diff[:, -output.shape[1]:]
-        writer_mask = mask[:1].sigmoid_()
-        writer_diff = diff[:1]
-        indices = diff[:, :, :-1].reshape(-1, diff.shape[-1] - 1).sum(dim=1).nonzero()
-        mask = mask.reshape(-1, mask.shape[-1])
-        diff = diff.reshape(-1, diff.shape[-1])
-        masked_output = output.reshape(-1, self.out_channels)[indices]
-        masked_real = real.reshape(-1, self.out_channels)[indices]
-        loss_large = self.large_loss(masked_output, masked_real)
-        loss_small = self.small_loss(mask, diff)
+    def train(self, x, nonzero, diff, nonzero_diff, condition, length, step=1, train=True):
+        mask = self.small_net(x[:, :, :-1], condition).transpose(1, 2)
+        output = self.large_net(nonzero[:, :, :-1], condition, nonzero_diff.transpose(1, 2)).transpose(1, 2)
+        diff = diff[:, -mask.shape[1]:]
+        masked_output = [score[-ll:] for score, ll in zip(output, length)]
+        masked_real = [score[-ll:] for score, ll in zip(nonzero.transpose(1, 2)[:, -output.shape[1]:], length)]
+        loss_large = self.large_loss(torch.cat(masked_output, dim=0), torch.cat(masked_real, dim=0)) # pylint: disable=E1101
+        loss_small = self.small_loss(mask.flatten(0, 1), diff.flatten(0, 1))
         loss_large_item = loss_large.item()
         loss_small_item = loss_small.item()
         if train:
-            self.optimizer.zero_grad()
+            self.optimizer_large.zero_grad()
             loss_large.backward()
+            self.optimizer_large.step()
+            self.optimizer_small.zero_grad()
             loss_small.backward()
-            self.optimizer.step()
-            del loss_large, loss_small
+            self.optimizer_small.step()
+            tqdm.write('Training step {}/{} Large loss: {}, Small loss: {}'.format(step, self.total, loss_large_item, loss_small_item))
+            self.writer.add_scalar('Train/Large loss', loss_large_item, step)
+            self.writer.add_scalar('Train/Small loss', loss_small_item, step)
             if step % 20 == 19:
-                tqdm.write('Training step {}/{} Large loss: {}, Small loss: {}'.format(step, self.total, loss_large_item, loss_small_item))
-                self.writer.add_scalar('Train/Large loss', loss_large_item, step)
-                self.writer.add_scalar('Train/Small loss', loss_small_item, step)
-                self.writer.add_image('Score/Real', real[:1], step)
-                self.writer.add_image('Score/Generated', output[:1].sigmoid_(), step)
-                self.writer.add_image('Hidden/Mask', writer_mask, step)
-                self.writer.add_image('Hidden/Diff', writer_diff, step)
+                self.writer.add_image('Score/Real', masked_real[0].unsqueeze(dim=0), step)
+                self.writer.add_image('Score/Generated', masked_output[0].unsqueeze(dim=0).sigmoid_(), step)
+                self.writer.add_image('Hidden/Diff', diff[:1], step)
+                self.writer.add_image('Hidden/Mask', mask[:1].sigmoid_(), step)
+        del loss_large, loss_small
         return loss_large_item, loss_small_item
 
-    def sample(self, step, temperature=1., init=None, diff=None, condition=None, length=2048):
+    def sample(self, step, temperature=1., init=None, nonzero=None, diff=None, nonzero_diff=None, condition=None, length=2048):
         if not os.path.isdir('Samples'):
             os.mkdir('Samples')
-        roll = self.generate(temperature, init, diff, condition, length).detach().cpu().numpy()
+        roll = self.generate(temperature, init, nonzero, nonzero_diff, condition, length).detach().cpu().numpy()
         roll = clean(roll)
         save_roll(roll, step)
         midi = piano_rolls_to_midi(roll)
@@ -119,7 +120,7 @@ class Wavenet:
 
     def gen_init(self, condition=None):
         channels = [0, 72, 120, 192, 240, 288, 324]
-        output = torch.zeros([1, self.channels, self.receptive_field + 2]).cuda() # pylint: disable=E1101
+        output = torch.zeros([1, self.channels, self.large_receptive_field + 2]).cuda() # pylint: disable=E1101
         output[:, 324] = 1
         if condition is None:
             condition = torch.randint(2, size=(7,)).cuda() # pylint: disable=E1101
@@ -130,41 +131,35 @@ class Wavenet:
         diff = torch.cat((output[:, :, 0:], output[:, :, -1:])) != output # pylint: disable=E1101
         return output, diff.to(torch.float32), condition # pylint: disable=E1101
 
-    def generate(self, temperature=1., init=None, diff=None, condition=None, length=2048):
+    def generate(self, temperature=1., init=None, nonzero=None, nonzero_diff=None, condition=None, length=2048):
         if init is None:
-            init, diff, condition = self.gen_init(condition)
+            init, nonzero_diff, condition = self.gen_init(condition)
         else:
-            init.unsqueeze_(dim=0)
-            diff = diff.unsqueeze_(dim=0).transpose(1, 2)
-            condition.unsqueeze_(dim=0)
-        init = init[:, :, :self.receptive_field + 2]
-        diff = diff[:, :, :self.receptive_field + 2]
-        output = torch.zeros((self.out_channels, 1)).cuda() # pylint: disable=E1101
-        self.large_net.module.fill_queues(init, condition, diff)
+            init = init.unsqueeze(dim=0)
+            nonzero = nonzero.unsqueeze(dim=0)
+            nonzero_diff = nonzero_diff.unsqueeze(dim=0).transpose(1, 2)
+            condition = condition.unsqueeze(dim=0)
+        init = init[:, :, -self.small_receptive_field - 2:]
+        nonzero = nonzero[:, :, -self.large_receptive_field - 2:]
+        nonzero_diff = nonzero_diff[:, :, -self.large_receptive_field - 2:]
+        self.large_net.module.fill_queues(nonzero, condition, nonzero_diff)
         self.small_net.module.fill_queues(init, condition)
-        x = init[:, :, -2:]
+        nonzero = nonzero[:, :, -2:]
+        output = nonzero[0, :, -2:]
+        nonzero_diff = nonzero_diff[:, :, -2:]
         for _ in tqdm(range(length), dynamic_ncols=True):
-            cont = self.small_net.module.sample_forward(x[:, :, -2:], condition)
+            cont = self.small_net.module.sample_forward(output[:, -2:].unsqueeze(dim=0), condition).sigmoid_()
             cont = torch.cuda.FloatTensor(cont.shape).uniform_() < cont # pylint: disable=E1101
-            cont = cont.to(torch.float32) # pylint: disable=E1101
-            diff = torch.cat((diff, cont), dim=-1) # pylint: disable=E1101
-            if cont.squeeze()[-1] > torch.cuda.FloatTensor([1]).uniform_(): # pylint: disable=E1101
-                output = torch.cat((output, x[0, :, -1:]), dim=-1) # pylint: disable=E1101
-                x = torch.cat((x, x[:, :, -1:]), dim=-1) # pylint: disable=E1101
-                #del cont
+            if cont.squeeze()[-1]:
+                output = torch.cat((output, output[:, -1:]), dim=-1) # pylint: disable=E1101
                 continue
-            diff = diff[:, :, 1 - x.shape[2]:]
-            nxt = self.large_net.module.sample_forward(x, condition, diff)
-            if temperature != 1:
-                nxt += 0.5
-                nxt.pow_(temperature)
-                nxt -= 0.5
-            nxt = nxt > torch.cuda.FloatTensor(self.out_channels).uniform_() # pylint: disable=E1101
+            nonzero_diff = cont.to(torch.float32) # pylint: disable=E1101
+            nxt = self.large_net.module.sample_forward(nonzero, condition, nonzero_diff) * temperature
+            nxt = nxt.sigmoid_() > torch.cuda.FloatTensor(self.out_channels).uniform_() # pylint: disable=E1101
             nxt = nxt.to(torch.float32) # pylint: disable=E1101
             output = torch.cat((output, nxt[0]), dim=-1) # pylint: disable=E1101
-            x = torch.cat((x, nxt), dim=-1) # pylint: disable=E1101
-            x = x[:, :, -2:]
-            #del cont, nxt
+            nonzero = torch.cat((nonzero, nxt), dim=-1) # pylint: disable=E1101
+            nonzero = nonzero[:, :, -2:]
         return output[:, -length:]
 
     def save(self, step):

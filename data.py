@@ -12,12 +12,12 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import torch.utils.data as data
 
-INPUT_LENGTH = 16384
-MAX_LENGTH = 32768
+INPUT_LENGTH = 8192
+NON_LENGTH = 1024
 pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
 np.random.shuffle(pathlist)
-trainlist = pathlist[:-144]
-testlist = pathlist[-144:]
+trainlist = pathlist[:-768]
+testlist = pathlist[-768:]
 
 def natural_sort_key(s, _nsre=re.compile('(\\d+)')):
     return [int(text) if text.isdigit() else text.lower() for text in _nsre.split(s)]
@@ -31,30 +31,52 @@ def piano_roll(path, receptive_field):
     limit_slice = [0, 72, 120, 192, 240, 288, 324]
     piano_rolls = [(_.get_piano_roll(fs=song.resolution), _.program) for _ in song.instruments if not _.is_drum and _.program // 8 in classes]
     length = np.amax([roll.shape[1] for roll, _ in piano_rolls])
-    data = np.zeros(shape=(326, length))
-    condition = np.zeros(shape=(6, 1))
+    data_full = np.zeros(shape=(326, length))
+    diff_full = np.zeros(shape=(7, length - 1))
+    condition = np.zeros(shape=(6))
     shift = np.random.randint(-2, 3)
     for roll, instrument in piano_rolls:
         i = classes.index(instrument // 8)
         sliced_roll = roll[limits[i][0]+shift:limits[i][1]+shift]
-        data[limit_slice[i]:limit_slice[i + 1]] += np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
+        data_full[limit_slice[i]:limit_slice[i + 1]] += np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
         condition[i] = 1
-    num = np.random.randint(0, length)
-    data = data[:, num : INPUT_LENGTH + num]
+    for i in range(6):
+        diff_full[i] += (np.diff(data_full[limit_slice[i]:limit_slice[i + 1]]) != 0).sum(axis=0)
+    num = np.random.randint(0, max(length - INPUT_LENGTH, 0) + 1)
+    data = data_full[:, num : INPUT_LENGTH + num]
     data[324] += 1 - data[:324].sum(axis = 0)
     length = data.shape[1]
     if length < INPUT_LENGTH:
         data = np.pad(data, [(0, 0), (INPUT_LENGTH - length, 0)], 'constant')
-        data[-1, 0:INPUT_LENGTH - length] = 1
+        data[-1, :INPUT_LENGTH - length] = 1
     data = data > 0
-    answer = np.transpose(data[:, receptive_field + 1:], axes=(1, 0))
-    diff = np.zeros((7, INPUT_LENGTH - 1))
-    for i in range(len(limit_slice) - 1):
-        diff[i] += np.sum(np.diff(data[limit_slice[i]:limit_slice[i + 1]]), axis=0)
-    diff[-1] += 1 - np.sum(diff[:-1], axis=0)
-    diff = np.transpose(diff, axes=(1, 0)) > 0
-    diff = np.ascontiguousarray(diff)
-    return data[:, :-1].astype(np.float32), answer.astype(np.float32), diff.astype(np.float32), condition.astype(np.float32)
+    diff = np.zeros(shape=(7, INPUT_LENGTH - 1))
+    for i in range(6):
+        diff[i] += (np.diff(data[limit_slice[i]:limit_slice[i + 1]]) != 0).sum(axis=0)
+    diff[-1] += 1 - diff[:-1].sum(axis=0)
+    diff = np.ascontiguousarray(diff.transpose() > 0)
+    indices = diff_full[:-1].sum(axis=0).nonzero()[0]
+    nonzero = data_full[:, indices + 1].astype(np.float32)
+    length = nonzero.shape[1]
+    num = np.random.randint(0, max(length - NON_LENGTH, 0) + 1)
+    nonzero = nonzero[:, num : NON_LENGTH + num]
+    nonzero[324] += 1 - nonzero[:324].sum(axis=0)
+    length = nonzero.shape[1]
+    if length < NON_LENGTH:
+        nonzero = np.pad(nonzero, [(0, 0), (NON_LENGTH - length, 0)], 'constant')
+        nonzero[-1, :NON_LENGTH - length] = 1
+    nonzero = nonzero > 0
+    nonzero_diff = np.zeros(shape=(7, NON_LENGTH - 1))
+    for i in range(6):
+        nonzero_diff[i] += (np.diff(nonzero[limit_slice[i]:limit_slice[i + 1]]) != 0).sum(axis=0)
+    nonzero_diff[-1] += 1 - nonzero_diff[:-1].sum(axis=0)
+    nonzero_diff = np.ascontiguousarray(nonzero_diff.transpose() > 0)
+    return data.astype(np.float32), \
+            nonzero.astype(np.float32), \
+            diff.astype(np.float32), \
+            nonzero_diff.astype(np.float32), \
+            condition.astype(np.float32), \
+            length
 
 def clean(x):
     return x[:-2]
@@ -111,8 +133,7 @@ class Dataset(data.Dataset):
         self.receptive_field = receptive_field
 
     def __getitem__(self, index):
-        data = piano_roll(self.pathlist[index], self.receptive_field)
-        return data
+        return piano_roll(self.pathlist[index], self.receptive_field)
 
     def __len__(self):
         return len(self.pathlist)
@@ -122,14 +143,13 @@ class DataLoader(data.DataLoader):
         super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers)
 
 def Test():
-    total = 0
-    on = np.zeros(7)
-    for i, path in enumerate(tqdm(pathlist), dynamic_ncols=True):
-        *_, diff, _ = piano_roll(path, 5115)
-        total += diff.shape[0]
-        on += np.sum(diff, axis=0)
-        if i % 20 == 19:
-            tqdm.write(str(total / on))
+    nonzerolist = []
+    for _, path in enumerate(tqdm(pathlist, dynamic_ncols=True)):
+        x, nonzero, diff, nonzero_diff, condition, length = piano_roll(path, 10235)
+        nonzerolist.append(np.nonzero(diff[:, :-1].sum(axis=-1))[0].shape[0])
+    plt.hist(nonzerolist, bins=100)
+    plt.grid()
+    plt.show()
 
 if __name__ == '__main__':
     Test()

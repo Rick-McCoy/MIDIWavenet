@@ -32,8 +32,8 @@ class ResidualBlock(torch.nn.Module):
         self.dilation = dilation
         self.filter_conv = DilatedCausalConv1d(residual_channels, dilation_channels, dilation=dilation)
         self.gate_conv = DilatedCausalConv1d(residual_channels, dilation_channels, dilation=dilation)
-        self.conditional_filter_conv = torch.nn.Conv1d(condition_channels, dilation_channels, 1)
-        self.conditional_gate_conv = torch.nn.Conv1d(condition_channels, dilation_channels, 1)
+        self.conditional_filter_linear = torch.nn.Linear(condition_channels, dilation_channels)
+        self.conditional_gate_linear = torch.nn.Linear(condition_channels, dilation_channels)
         self.residual_conv = torch.nn.Conv1d(dilation_channels, residual_channels, 1)
         self.skip_conv = torch.nn.Conv1d(dilation_channels, skip_channels, 1)
         self.queue = queue.Queue(dilation)
@@ -46,19 +46,18 @@ class ResidualBlock(torch.nn.Module):
     def forward(self, x, condition, time_series=None, sample=False):
         dilated_filter = self.filter_conv(x, sample)
         dilated_gate = self.gate_conv(x, sample)
-        conditional_filter = self.conditional_filter_conv(condition)
-        conditional_gate = self.conditional_gate_conv(condition)
+        conditional_filter = self.conditional_filter_linear(condition).unsqueeze(dim=-1)
+        conditional_gate = self.conditional_gate_linear(condition).unsqueeze(dim=-1)
         dilated_filter += conditional_filter
+        dilated_gate += conditional_gate
         if self.time_on:
             time_series_filter = self.time_filter_conv(time_series)
             dilated_filter += time_series_filter
-        dilated_filter.tanh_()
-        dilated_gate += conditional_gate
-        if self.time_on:
             time_series_gate = self.time_gate_conv(time_series)
             dilated_gate += time_series_gate
+        dilated_filter.tanh_()
         dilated_gate.sigmoid_()
-        dilated = dilated_filter * conditional_gate
+        dilated = dilated_filter * dilated_gate
 
         output = self.residual_conv(dilated)
         output += x[:, :, -output.shape[2]:]
@@ -114,7 +113,6 @@ class ResidualStack(torch.nn.Module):
             else:
                 output, skip = checkpoint(res_block, output, condition)
             res_sum += skip
-            #del skip
         return res_sum
 
     def sample_forward(self, x, condition, time_series=None):
@@ -122,20 +120,11 @@ class ResidualStack(torch.nn.Module):
         res_sum = 0
         for res_block in self.res_blocks:
             res_block.skip_size = 1
-            for i in range(output.shape[2]):
-                top = res_block.queue.get()
-                current = output[:, :, i].unsqueeze(dim=-1)
-                res_block.queue.put(current)
-                full = torch.cat((top, current), dim=-1) # pylint: disable=E1101
-                if self.time_on:
-                    current_time = time_series[:, :, i].unsqueeze(dim=-1)
-                    current, skip = res_block(full, condition, current_time, sample=True)
-                else:
-                    current, skip = res_block(full, condition, sample=True)
-                output[:, :, i] = current.squeeze(dim=-1)
-                #del current_time, top, full, current
+            top = res_block.queue.get()
+            res_block.queue.put(output)
+            full = torch.cat((top, output), dim=-1) # pylint: disable=E1101
+            output, skip = res_block(full, condition, time_series, sample=True)
             res_sum += skip
-            #del skip
         return res_sum
 
     def fill_queues(self, x, condition, time_series=None):
@@ -158,16 +147,15 @@ class PostProcess(torch.nn.Module):
 
     def forward(self, x):
         output = self.relu(x)
-        #output = self.conv1(output)
         output = checkpoint(self.conv1, output)
-        output = self.relu(output)
+        self.relu(output)
         output = self.conv2(output)
         return output
     
     def sample_forward(self, x):
         output = self.relu(x)
         output = self.conv1(output)
-        output = self.relu(output)
+        self.relu(output)
         output = self.conv2(output)
         return output
 
@@ -210,20 +198,17 @@ class Wavenet(torch.nn.Module):
 
     def forward(self, x, condition, time_series=None):
         output_size = self.calc_output_size(x)
-        #output = self.causal(x)
         dummy = torch.zeros_like(condition, requires_grad=True) # pylint: disable=E1101
         output = checkpoint(self.causal, x, dummy)
         output = self.res_stacks(output, condition, output_size, time_series)
         output = self.post(output)
-        #del dummy
         return output[:, :, :-1]
 
     def sample_forward(self, x, condition, time_series=None):
-        #output = self.causal(x)[:, :, 1:]
         output = self.causal(x)[:, :, 1:]
         output = self.res_stacks.sample_forward(output, condition, time_series)
         output = self.post.sample_forward(output)
-        return output.sigmoid_()
+        return output
 
     def fill_queues(self, x, condition, time_series=None):
         x = self.causal(x)
