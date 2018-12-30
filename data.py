@@ -143,13 +143,9 @@ class DataLoader(data.DataLoader):
         super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers)
 
 def Test():
-    nonzerolist = []
-    for _, path in enumerate(tqdm(pathlist, dynamic_ncols=True)):
-        x, nonzero, diff, nonzero_diff, condition, length = piano_roll(path, 10235)
-        nonzerolist.append(np.nonzero(diff[:, :-1].sum(axis=-1))[0].shape[0])
-    plt.hist(nonzerolist, bins=100)
-    plt.grid()
-    plt.show()
+    for i, path in enumerate(pathlist[:5]):
+        roll, *_ = piano_roll(str(path), 1023 * 6)
+        save_roll(roll[:, :1024], i)
 
 if __name__ == '__main__':
     Test()

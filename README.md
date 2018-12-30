@@ -26,6 +26,8 @@ Training data are from two sources:
 
 [The Largest MIDI Collection on the Internet](https://www.reddit.com/r/WeAreTheMusicMakers/comments/3ajwe4/the_largest_midi_collection_on_the_internet/): A small subset was used.
 
+Extract datasets under /Datasets/Classics.
+
 ### Training
 
 Run
@@ -34,13 +36,13 @@ Run
 python3 train.py
 ```
 
-All hyperparameters are modifiable via flags. Please read train.py for specifics.
+All hyperparameters are modifiable via flags. Please refer to train.py for specifics.
 
 ### Sampling
 
-Make sure your checkpoint is under /Checkpoints.
+Make sure your checkpoints are under /Checkpoints.
 
-The checkpoint with the larges number in its name will be automatically selected.
+The two checkpoints with the largest number in its name will be automatically selected.
 
 Then, run
 
@@ -52,7 +54,7 @@ python3 train.py --sample NUMBER_OF_SAMPLES
 
 Enable general generation of MIDI files: Currently only able to generate classical music.
 
-~~Add length flag for sampling: Currently fixed at 4096 time steps. (~43 seconds)~~ Added length flag. Unit of length: 1/96(s).
+~~Add length flag for sampling: Currently fixed at 4096 time steps. (\~43 seconds)~~ Added length flag. Unit of length: 1/96 (s).
 
 ## Authors
 

@@ -142,10 +142,10 @@ class Wavenet:
         init = init[:, :, -self.small_receptive_field - 2:]
         nonzero = nonzero[:, :, -self.large_receptive_field - 2:]
         nonzero_diff = nonzero_diff[:, :, -self.large_receptive_field - 2:]
-        self.large_net.module.fill_queues(nonzero, condition, nonzero_diff)
         self.small_net.module.fill_queues(init, condition)
+        self.large_net.module.fill_queues(nonzero, condition, nonzero_diff)
         nonzero = nonzero[:, :, -2:]
-        output = nonzero[0, :, -2:]
+        output = init[0, :, -2:]
         nonzero_diff = nonzero_diff[:, :, -2:]
         for _ in tqdm(range(length), dynamic_ncols=True):
             cont = self.small_net.module.sample_forward(output[:, -2:].unsqueeze(dim=0), condition).sigmoid_()

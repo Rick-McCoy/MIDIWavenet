@@ -7,11 +7,12 @@ class CausalConv1d(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
         super(CausalConv1d, self).__init__()
         self.conv = torch.nn.Conv1d(in_channels, out_channels, 
-                                    kernel_size=2, padding=1, 
-                                    dilation=1, bias=False)
+                                    kernel_size=2, bias=False)
 
     def forward(self, x, dummy=None):
-        return self.conv(x)[:, :, :-1]
+        output = torch.nn.functional.pad(x, (1, 0), 'constant')
+        output = self.conv(output)
+        return output
 
 class DilatedCausalConv1d(torch.nn.Module):
     def __init__(self, in_channels, out_channels, dilation):
