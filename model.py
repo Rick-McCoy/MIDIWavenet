@@ -49,15 +49,15 @@ class Wavenet:
     
     def _small_loss(self):
         loss = torch.nn.BCEWithLogitsLoss(
-            # pos_weight=torch.cuda.FloatTensor([ # pylint: disable=E1101
-            #     6.07501087e+01, 
-            #     2.43404231e+02, 
-            #     5.06094867e+02, 
-            #     1.42857687e+03, 
-            #     6.30166071e+02, 
-            #     9.81309299e+02, 
-            #     1.02464796e+00
-            # ])
+             pos_weight=torch.cuda.FloatTensor([ # pylint: disable=E1101
+                 6.07501087e+01, 
+                 2.43404231e+02, 
+                 5.06094867e+02, 
+                 1.42857687e+03, 
+                 6.30166071e+02, 
+                 9.81309299e+02, 
+                 1.02464796e+00
+             ])
         )
         return loss
 

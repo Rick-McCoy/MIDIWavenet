@@ -22,7 +22,7 @@ testlist = pathlist[-768:]
 def natural_sort_key(s, _nsre=re.compile('(\\d+)')):
     return [int(text) if text.isdigit() else text.lower() for text in _nsre.split(s)]
 
-def piano_roll(path, receptive_field):
+def piano_roll(path):
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         song = pm.PrettyMIDI(midi_file=str(path))
@@ -124,27 +124,26 @@ def piano_rolls_to_midi(x, fs=96):
     return midi
 
 class Dataset(data.Dataset):
-    def __init__(self, train, receptive_field):
+    def __init__(self, train):
         super(Dataset, self).__init__()
         if train:
             self.pathlist = trainlist
         else:
             self.pathlist = testlist
-        self.receptive_field = receptive_field
 
     def __getitem__(self, index):
-        return piano_roll(self.pathlist[index], self.receptive_field)
+        return piano_roll(self.pathlist[index])
 
     def __len__(self):
         return len(self.pathlist)
 
 class DataLoader(data.DataLoader):
-    def __init__(self, batch_size, receptive_field, shuffle=True, num_workers=16, train=True):
-        super(DataLoader, self).__init__(Dataset(train, receptive_field), batch_size, shuffle, num_workers=num_workers)
+    def __init__(self, batch_size, shuffle=True, num_workers=16, train=True):
+        super(DataLoader, self).__init__(Dataset(train), batch_size, shuffle, num_workers=num_workers)
 
 def Test():
     for i, path in enumerate(pathlist[:5]):
-        roll, *_ = piano_roll(str(path), 1023 * 6)
+        roll, *_ = piano_roll(str(path))
         save_roll(roll[:, :1024], i)
 
 if __name__ == '__main__':

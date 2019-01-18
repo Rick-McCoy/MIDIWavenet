@@ -20,14 +20,12 @@ class Trainer():
         self.wavenet = Wavenet(args, self.train_writer)
         self.train_data_loader = DataLoader(
             args.batch_size * torch.cuda.device_count(), 
-            self.wavenet.large_receptive_field, 
             args.shuffle, 
             args.num_workers, 
             True
         )
         self.test_data_loader = DataLoader(
             args.batch_size * torch.cuda.device_count(), 
-            self.wavenet.large_receptive_field, 
             args.shuffle, 
             args.num_workers, 
             False
@@ -120,10 +118,10 @@ if __name__ == '__main__':
     parser.add_argument('--out_channels_small', type=int, default=7)
     parser.add_argument('--condition_channels_small', type=int, default=6)
     parser.add_argument('--num_epochs', type=int, default=10000)
-    parser.add_argument('--learning_rate', type=float, default=0.0002)
-    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--learning_rate', type=float, default=0.0004)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--shuffle', type=bool, default=True)
-    parser.add_argument('--num_workers', type=int, default=32)
+    parser.add_argument('--num_workers', type=int, default=24)
     parser.add_argument('--sample', type=int, default=0)
     parser.add_argument('--length', type=int, default=1024)
     parser.add_argument('--resume', type=int, default=0)
