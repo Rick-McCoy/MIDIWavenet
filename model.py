@@ -78,13 +78,12 @@ class Wavenet:
             self.small_net.cuda()
             self.small_net = torch.nn.DataParallel(self.small_net)
 
-    def train(self, x, nonzero, diff, nonzero_diff, condition, length, step=1, train=True):
+    def train(self, x, nonzero, diff, nonzero_diff, condition, step=1, train=True):
         mask = self.small_net(x[:, :, :-1], condition).transpose(1, 2)
         output = self.large_net(nonzero[:, :, :-1], condition, nonzero_diff.transpose(1, 2)).transpose(1, 2)
         diff = diff[:, -mask.shape[1]:]
-        masked_output = [score[-ll:] for score, ll in zip(output, length)]
-        masked_real = [score[-ll:] for score, ll in zip(nonzero.transpose(1, 2)[:, -output.shape[1]:], length)]
-        loss_large = self.large_loss(torch.cat(masked_output, dim=0), torch.cat(masked_real, dim=0)) # pylint: disable=E1101
+        nonzero = nonzero[-output.shape[1]:].transpose(1, 2)
+        loss_large = self.large_loss(output, nonzero)
         loss_small = self.small_loss(mask.flatten(0, 1), diff.flatten(0, 1))
         loss_large_item = loss_large.item()
         loss_small_item = loss_small.item()
@@ -99,8 +98,8 @@ class Wavenet:
             self.writer.add_scalar('Train/Large loss', loss_large_item, step)
             self.writer.add_scalar('Train/Small loss', loss_small_item, step)
             if step % 20 == 19:
-                self.writer.add_image('Score/Real', masked_real[0].unsqueeze(dim=0), step)
-                self.writer.add_image('Score/Generated', masked_output[0].unsqueeze(dim=0).sigmoid_(), step)
+                self.writer.add_image('Score/Real', nonzero[0].unsqueeze(dim=0), step)
+                self.writer.add_image('Score/Generated', output[0].unsqueeze(dim=0).sigmoid_(), step)
                 self.writer.add_image('Hidden/Diff', diff[:1], step)
                 self.writer.add_image('Hidden/Mask', mask[:1].sigmoid_(), step)
         del loss_large, loss_small

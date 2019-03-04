@@ -37,9 +37,7 @@ def piano_roll(path):
     shift = np.random.randint(-2, 3)
     for roll, i in piano_rolls:
         sliced_roll = roll[limits[i][0] + shift:limits[i][1] + shift]
-        if sliced_roll.shape[1] < length:
-            sliced_roll = np.pad(sliced_roll, [(0, 0), (0, length - sliced_roll.shape[1])], 'constant')
-        data_full[limit_slice[i]:limit_slice[i + 1]] += sliced_roll
+        data_full[limit_slice[i]:limit_slice[i + 1], -sliced_roll.shape[1]:] += sliced_roll
         condition[i] = 1
     if length < INPUT_LENGTH:
         data_full = np.pad(data_full, [(0, 0), (INPUT_LENGTH - length, 0)], 'constant')
@@ -48,35 +46,35 @@ def piano_roll(path):
     num = np.random.randint(0, length - INPUT_LENGTH + 1)
     data = data_full[:, num : INPUT_LENGTH + num]
     data[324] = data[:324].sum(axis = 0) == 0
-    data = data > 0
+    data = data != 0
     diff = np.zeros(shape=(7, INPUT_LENGTH - 1))
     data_diff = np.diff(data) != 0
     for i in range(6):
         diff[i] += data_diff[limit_slice[i]:limit_slice[i + 1]].sum(axis=0)
-    diff[-1] += diff[:-1].sum(axis=0) == 0
-    diff = np.ascontiguousarray(diff.transpose() > 0)
+    diff[-1] = diff[:-1].sum(axis=0) == 0
+    diff = np.ascontiguousarray(diff.transpose() != 0)
     indices = (np.diff(data_full) != 0).sum(axis=0).nonzero()[0]
     nonzero = data_full[:, indices + 1]
     length = nonzero.shape[1]
-    num = np.random.randint(0, max(length - NON_LENGTH, 0) + 1)
-    nonzero = nonzero[:, num : NON_LENGTH + num]
-    nonzero[324] += 1 - nonzero[:324].sum(axis=0)
     if length < NON_LENGTH:
         nonzero = np.pad(nonzero, [(0, 0), (NON_LENGTH - length, 0)], 'constant')
         nonzero[-1, :NON_LENGTH - length] = 1
-    nonzero = nonzero > 0
+        length = NON_LENGTH
+    num = np.random.randint(0, length - NON_LENGTH + 1)
+    nonzero = nonzero[:, num : NON_LENGTH + num]
+    nonzero[324] = nonzero[:324].sum(axis=0) == 0
+    nonzero = nonzero != 0
     nonzero_diff = np.zeros(shape=(7, NON_LENGTH - 1))
     nonzero_diff_bin = np.diff(nonzero) != 0
     for i in range(6):
         nonzero_diff[i] += nonzero_diff_bin[limit_slice[i]:limit_slice[i + 1]].sum(axis=0)
-    nonzero_diff[-1] += 1 - nonzero_diff[:-1].sum(axis=0)
-    nonzero_diff = np.ascontiguousarray(nonzero_diff.transpose() > 0)
+    nonzero_diff[-1] = nonzero_diff[:-1].sum(axis=0) != 0
+    nonzero_diff = np.ascontiguousarray(nonzero_diff.transpose() != 0)
     return data.astype(np.float32), \
             nonzero.astype(np.float32), \
             diff.astype(np.float32), \
             nonzero_diff.astype(np.float32), \
-            condition.astype(np.float32), \
-            length
+            condition.astype(np.float32)
 
 def clean(x):
     return x[:-2]

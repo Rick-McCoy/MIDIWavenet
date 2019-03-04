@@ -44,8 +44,8 @@ class Trainer():
                 self.wavenet.load(str(checkpoint_list[-2]), str(checkpoint_list[-1]))
 
     def run(self):
-        for epoch in tqdm(range(self.args.num_epochs)):
-            for i, (x, nonzero, diff, nonzero_diff, condition, length) in enumerate(tqdm(self.train_data_loader, total=self.train_data_loader.__len__(), dynamic_ncols=True)):
+        for epoch in tqdm(range(self.args.num_epochs), dynamic_ncols=True):
+            for i, (x, nonzero, diff, nonzero_diff, condition) in enumerate(tqdm(self.train_data_loader, total=self.train_data_loader.__len__(), dynamic_ncols=True)):
                 step = i + epoch * self.train_data_loader.__len__()
                 self.wavenet.train(
                     x.cuda(), 
@@ -53,19 +53,17 @@ class Trainer():
                     diff.cuda(), 
                     nonzero_diff.cuda(),
                     condition.cuda(), 
-                    length.cuda(), 
                     step=step, train=True
                 )
             with torch.no_grad():
                 train_loss_large = train_loss_small = 0
-                for x, nonzero, diff, nonzero_diff, condition, length in tqdm(self.test_data_loader, total=self.test_data_loader.__len__(), dynamic_ncols=True):
+                for x, nonzero, diff, nonzero_diff, condition in tqdm(self.test_data_loader, total=self.test_data_loader.__len__(), dynamic_ncols=True):
                     current_large_loss, current_small_loss = self.wavenet.train(
                         x.cuda(), 
                         nonzero.cuda(), 
                         diff.cuda(), 
                         nonzero_diff.cuda(),
                         condition.cuda(), 
-                        length.cuda(), 
                         train=False
                     )
                     train_loss_large += current_large_loss
