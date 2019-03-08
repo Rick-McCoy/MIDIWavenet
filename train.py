@@ -96,8 +96,8 @@ class Trainer():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--layer_size', type=int, default=6)
-    parser.add_argument('--stack_size', type=int, default=3)
+    parser.add_argument('--layer_size', type=int, default=7)
+    parser.add_argument('--stack_size', type=int, default=2)
     parser.add_argument('--channels', type=int, default=326)
     parser.add_argument('--residual_channels', type=int, default=128)
     parser.add_argument('--dilation_channels', type=int, default=128)

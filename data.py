@@ -30,46 +30,47 @@ def piano_roll(path):
     classes = [0, 3, 5, 7, 8, 9]
     limits = [[24, 96], [36, 84], [24, 96], [36, 84], [36, 84], [60, 96]]
     limit_slice = [0, 72, 120, 192, 240, 288, 324]
-    piano_rolls = [(_.get_piano_roll(fs=song.resolution), classes.index(_.program // 8)) for _ in song.instruments if not _.is_drum and _.program // 8 in classes]
-    length = np.amax([roll.shape[1] for roll, _ in piano_rolls])
-    data_full = np.zeros(shape=(326, length))
-    condition = np.zeros(shape=(6))
+    instruments = [_ for _ in song.instruments if not _.is_drum and _.program // 8 in classes]
+    true_length = max([int(_.get_end_time() * song.resolution) for _ in instruments])
+    length = max(INPUT_LENGTH, true_length)
+    data_full = np.zeros(shape=(326, length), dtype=np.bool)
+    condition = np.zeros(shape=(6), dtype=np.bool)
     shift = np.random.randint(-2, 3)
-    for roll, i in piano_rolls:
-        sliced_roll = roll[limits[i][0] + shift:limits[i][1] + shift]
-        data_full[limit_slice[i]:limit_slice[i + 1], -sliced_roll.shape[1]:] += sliced_roll
+    filler = length - true_length
+    if filler > 0:
+        data_full[-1, :filler] = 1
+    for inst in instruments:
+        sliced_roll = inst.get_piano_roll(fs=song.resolution).astype(np.bool)
+        i = classes.index(inst.program // 8)
+        data_full[limit_slice[i]:limit_slice[i + 1], filler:filler + sliced_roll.shape[1]] |= sliced_roll[limits[i][0] + shift:limits[i][1] + shift]
         condition[i] = 1
-    if length < INPUT_LENGTH:
-        data_full = np.pad(data_full, [(0, 0), (INPUT_LENGTH - length, 0)], 'constant')
-        data_full[-1, :INPUT_LENGTH - length] = 1
-        length = INPUT_LENGTH
+    data_full = data_full.astype(np.bool)
     num = np.random.randint(0, length - INPUT_LENGTH + 1)
     data = data_full[:, num : INPUT_LENGTH + num]
-    data[324] = data[:324].sum(axis = 0) == 0
-    data = data != 0
-    diff = np.zeros(shape=(7, INPUT_LENGTH - 1))
-    data_diff = np.diff(data) != 0
+    data[324] = np.invert(data[:324].any(axis=0))
+    diff = np.zeros(shape=(7, INPUT_LENGTH - 1), dtype=np.bool)
+    data_diff = np.diff(data)
     for i in range(6):
-        diff[i] += data_diff[limit_slice[i]:limit_slice[i + 1]].sum(axis=0)
-    diff[-1] = diff[:-1].sum(axis=0) == 0
-    diff = np.ascontiguousarray(diff.transpose() != 0)
-    indices = (np.diff(data_full) != 0).sum(axis=0).nonzero()[0]
-    nonzero = data_full[:, indices + 1]
-    length = nonzero.shape[1]
-    if length < NON_LENGTH:
-        nonzero = np.pad(nonzero, [(0, 0), (NON_LENGTH - length, 0)], 'constant')
-        nonzero[-1, :NON_LENGTH - length] = 1
-        length = NON_LENGTH
+        diff[i] = data_diff[limit_slice[i]:limit_slice[i + 1]].any(axis=0)
+    diff[-1] = np.invert(diff[:-1].any(axis=0))
+    diff = np.ascontiguousarray(diff.transpose())
+    indices = np.diff(data_full).any(axis=0).nonzero()[0]
+    true_length = indices.shape[0]
+    length = max(true_length, NON_LENGTH)
+    filler = length - true_length
+    nonzero = np.zeros((326, length), dtype=np.bool)
+    if filler > 0:
+        nonzero[:, :filler] = 1
+    nonzero[:, filler:] = data_full[:, indices + 1]
     num = np.random.randint(0, length - NON_LENGTH + 1)
     nonzero = nonzero[:, num : NON_LENGTH + num]
-    nonzero[324] = nonzero[:324].sum(axis=0) == 0
-    nonzero = nonzero != 0
+    nonzero[324] = np.invert(nonzero[:324].any(axis=0))
     nonzero_diff = np.zeros(shape=(7, NON_LENGTH - 1))
-    nonzero_diff_bin = np.diff(nonzero) != 0
+    nonzero_diff_bin = np.diff(nonzero)
     for i in range(6):
-        nonzero_diff[i] += nonzero_diff_bin[limit_slice[i]:limit_slice[i + 1]].sum(axis=0)
-    nonzero_diff[-1] = nonzero_diff[:-1].sum(axis=0) != 0
-    nonzero_diff = np.ascontiguousarray(nonzero_diff.transpose() != 0)
+        nonzero_diff[i] = nonzero_diff_bin[limit_slice[i]:limit_slice[i + 1]].any(axis=0)
+    nonzero_diff[-1] = np.invert(nonzero_diff[:-1].any(axis=0))
+    nonzero_diff = np.ascontiguousarray(nonzero_diff.transpose())
     return data.astype(np.float32), \
             nonzero.astype(np.float32), \
             diff.astype(np.float32), \
@@ -140,20 +141,8 @@ class DataLoader(data.DataLoader):
         super(DataLoader, self).__init__(Dataset(train), batch_size, shuffle, num_workers=num_workers)
 
 def Test():
-    timelist_1 = []
-    timelist_2 = []
-    for path in tqdm(pathlist[:100]):
-        *_, time_1, time_2, time_3 = piano_roll(str(path))
-        if time_2 < time_1:
-            timelist_1.append(time_2 / time_1)
-            timelist_2.append(time_3 / time_1)
-    plt.scatter(timelist_1, timelist_2)
-    # plt.hist(timelist_1, bins=100)
-    plt.show()
-    plt.close()
-    # plt.hist(timelist_2, bins=100)
-    # plt.show()
-    # plt.close()
+    for i in tqdm(range(200)):
+        piano_roll(pathlist[i])
 
 if __name__ == '__main__':
     Test()
