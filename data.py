@@ -37,17 +37,15 @@ def piano_roll(path):
     condition = np.zeros(shape=(6), dtype=np.bool)
     shift = np.random.randint(-2, 3)
     filler = length - true_length
-    if filler > 0:
-        data_full[-1, :filler] = 1
+    data_full[-1, :filler] = 1
     for inst in instruments:
         sliced_roll = inst.get_piano_roll(fs=song.resolution).astype(np.bool)
         i = classes.index(inst.program // 8)
         data_full[limit_slice[i]:limit_slice[i + 1], filler:filler + sliced_roll.shape[1]] |= sliced_roll[limits[i][0] + shift:limits[i][1] + shift]
         condition[i] = 1
-    data_full = data_full.astype(np.bool)
+    data_full[324] = np.invert(data_full[:324].any(axis=0))
     num = np.random.randint(0, length - INPUT_LENGTH + 1)
     data = data_full[:, num : INPUT_LENGTH + num]
-    data[324] = np.invert(data[:324].any(axis=0))
     diff = np.zeros(shape=(7, INPUT_LENGTH - 1), dtype=np.bool)
     data_diff = np.diff(data)
     for i in range(6):
@@ -59,8 +57,7 @@ def piano_roll(path):
     length = max(true_length, NON_LENGTH)
     filler = length - true_length
     nonzero = np.zeros((326, length), dtype=np.bool)
-    if filler > 0:
-        nonzero[:, :filler] = 1
+    nonzero[-1, :filler] = 1
     nonzero[:, filler:] = data_full[:, indices + 1]
     num = np.random.randint(0, length - NON_LENGTH + 1)
     nonzero = nonzero[:, num : NON_LENGTH + num]

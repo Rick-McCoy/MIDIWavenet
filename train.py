@@ -6,7 +6,7 @@ import torch
 import pathlib
 import time
 import numpy as np
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 from model import Wavenet
 from data import DataLoader, natural_sort_key
 from tensorboardX import SummaryWriter
