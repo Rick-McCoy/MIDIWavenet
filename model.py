@@ -136,7 +136,7 @@ class Wavenet:
         else:
             init = init.unsqueeze(dim=0)
             nonzero = nonzero.unsqueeze(dim=0)
-            nonzero_diff = nonzero_diff.unsqueeze(dim=0).transpose(1, 2)
+            nonzero_diff = nonzero_diff.unsqueeze(dim=0)
             condition = condition.unsqueeze(dim=0)
         init = init[:, :, -self.small_receptive_field - 2:]
         nonzero = nonzero[:, :, -self.large_receptive_field - 2:]

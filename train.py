@@ -55,6 +55,7 @@ class Trainer():
                     condition.cuda(), 
                     step=step, train=True
                 )
+                break
             with torch.no_grad():
                 train_loss_large = train_loss_small = 0
                 for x, nonzero, diff, nonzero_diff, condition in tqdm(self.test_data_loader, total=self.test_data_loader.__len__(), dynamic_ncols=True):
@@ -68,6 +69,7 @@ class Trainer():
                     )
                     train_loss_large += current_large_loss
                     train_loss_small += current_small_loss
+                    break
                 train_loss_large /= self.test_data_loader.__len__()
                 train_loss_small /= self.test_data_loader.__len__()
                 tqdm.write('Testing step Large Loss: {}'.format(train_loss_large))
@@ -81,7 +83,7 @@ class Trainer():
 
     def sample(self, num, name='Sample_{}'.format(int(time.time()))):
         for _ in tqdm(range(num), dynamic_ncols=True):
-            init, nonzero, diff, nonzero_diff, condition, _ = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
+            init, nonzero, diff, nonzero_diff, condition = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
             image = self.wavenet.sample(
                 name, 
                 temperature=self.args.temperature, 
