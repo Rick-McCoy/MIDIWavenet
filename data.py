@@ -1,6 +1,6 @@
 import os
 import pathlib
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 import pretty_midi as pm
 import numpy as np
 import torch

@@ -4,7 +4,7 @@ import itertools
 import torch.optim
 import numpy as np
 import pretty_midi as pm
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 from data import clean, piano_rolls_to_midi, save_roll
 from network import Wavenet as WavenetModule
 
