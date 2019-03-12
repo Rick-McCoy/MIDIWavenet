@@ -80,9 +80,9 @@ class Wavenet:
 
     def train(self, x, nonzero, diff, nonzero_diff, condition, step=1, train=True):
         mask = self.small_net(x[:, :, :-1], condition).transpose(1, 2)
-        output = self.large_net(nonzero[:, :, :-1], condition, nonzero_diff.transpose(1, 2)).transpose(1, 2)
+        output = self.large_net(nonzero[:, :, :-1], condition, nonzero_diff).transpose(1, 2)
         diff = diff[:, -mask.shape[1]:]
-        nonzero = nonzero[-output.shape[1]:].transpose(1, 2)
+        nonzero = nonzero[..., -output.shape[1]:].transpose(1, 2)
         loss_large = self.large_loss(output, nonzero)
         loss_small = self.small_loss(mask.flatten(0, 1), diff.flatten(0, 1))
         loss_large_item = loss_large.item()

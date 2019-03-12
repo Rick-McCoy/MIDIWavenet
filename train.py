@@ -117,7 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('--condition_channels_small', type=int, default=6)
     parser.add_argument('--num_epochs', type=int, default=10000)
     parser.add_argument('--learning_rate', type=float, default=0.001)
-    parser.add_argument('--batch_size', type=int, default=16)
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--shuffle', type=bool, default=True)
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--sample', type=int, default=0)

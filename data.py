@@ -67,7 +67,6 @@ def piano_roll(path):
     for i in range(6):
         nonzero_diff[i] = nonzero_diff_bin[limit_slice[i]:limit_slice[i + 1]].any(axis=0)
     nonzero_diff[-1] = np.invert(nonzero_diff[:-1].any(axis=0))
-    nonzero_diff = np.ascontiguousarray(nonzero_diff.transpose())
     return data.astype(np.float32), \
             nonzero.astype(np.float32), \
             diff.astype(np.float32), \
