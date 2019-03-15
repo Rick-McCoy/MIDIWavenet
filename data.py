@@ -15,7 +15,10 @@ import torch.utils.data as data
 
 INPUT_LENGTH = 4096
 NON_LENGTH = 512
-pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
+with open('pathlist.txt', 'r') as f:
+    pathlist = f.readlines()
+pathlist = [x.strip() for x in pathlist]
+#pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
 np.random.shuffle(pathlist)
 trainlist = pathlist[:-768]
 testlist = pathlist[-768:]
@@ -26,7 +29,7 @@ def natural_sort_key(s, _nsre=re.compile('(\\d+)')):
 def piano_roll(path):
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        song = pm.PrettyMIDI(midi_file=str(path))
+        song = pm.PrettyMIDI(midi_file=str(path).replace('\\', '/'))
     classes = [0, 3, 5, 7, 8, 9]
     limits = [[24, 96], [36, 84], [24, 96], [36, 84], [36, 84], [60, 96]]
     limit_slice = [0, 72, 120, 192, 240, 288, 324]

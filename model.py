@@ -94,7 +94,7 @@ class Wavenet:
             self.optimizer_small.zero_grad()
             loss_small.backward()
             self.optimizer_small.step()
-            tqdm.write('Training step {}/{} Large loss: {}, Small loss: {}'.format(step, self.total, loss_large_item, loss_small_item))
+            #tqdm.write('Training step {}/{} Large loss: {}, Small loss: {}'.format(step, self.total, loss_large_item, loss_small_item))
             self.writer.add_scalar('Train/Large loss', loss_large_item, step)
             self.writer.add_scalar('Train/Small loss', loss_small_item, step)
             if step % 20 == 19:
@@ -146,7 +146,8 @@ class Wavenet:
         nonzero = nonzero[:, :, -2:]
         output = init[0, :, -2:]
         nonzero_diff = nonzero_diff[:, :, -2:]
-        for _ in tqdm(range(length), dynamic_ncols=True):
+        #for _ in tqdm(range(length), dynamic_ncols=True):
+        for _ in range(length):
             cont = self.small_net.module.sample_forward(output[:, -2:].unsqueeze(dim=0), condition).sigmoid_()
             cont = torch.cuda.FloatTensor(cont.shape).uniform_() < cont # pylint: disable=E1101
             if cont.squeeze()[-1]:
