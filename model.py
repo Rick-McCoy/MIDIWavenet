@@ -89,13 +89,13 @@ class Wavenet:
             init = init.unsqueeze(dim=0)
         init = init[:, :, -self.receptive_field - 2:]
         self.net.module.fill_queues(init, condition)
-        output = init[0, :, -2:]
+        output = init[..., -2:]
         inc = 0
         while True:
-            cont = self.net.module.sample_forward(output[:, -2:].unsqueeze(dim=0), condition)
+            cont = self.net.module.sample_forward(output[..., -2:], condition)
             cont = torch.nn.functional.softmax(cont, dim=1)
             output = torch.cat((output, cont), dim=-1) # pylint: disable=E1101
-            if inc % 20 == 0 and cont[0].detach().cpu().numpy().argmax() == cont[0].shape[0] - 1:
+            if inc % 20 == 0 and cont.squeeze().detach().cpu().numpy().argmax() == cont.squeeze().shape[0] - 1:
                 break
             inc += 1
         return output[0, :, 1:]
