@@ -137,11 +137,16 @@ class Dataset(data.Dataset):
 
 class DataLoader(data.DataLoader):
     def __init__(self, batch_size, shuffle=True, num_workers=16, train=True):
-        super(DataLoader, self).__init__(Dataset(train), batch_size, shuffle, num_workers=num_workers)
+        super(DataLoader, self).__init__(Dataset(train), batch_size, shuffle, num_workers=num_workers, pin_memory=True)
 
 def Test():
+    res_list = []
     for i in tqdm(range(200)):
-        piano_roll(pathlist[i])
+        *_, res = piano_roll(pathlist[i])
+        res_list.append(res)
+    plt.hist(res_list)
+    plt.show()
+    plt.close()
 
 if __name__ == '__main__':
     Test()

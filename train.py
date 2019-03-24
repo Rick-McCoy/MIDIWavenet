@@ -50,11 +50,11 @@ class Trainer():
                     for i, (x, nonzero, diff, nonzero_diff, condition) in enumerate(pbar2):
                         step = i + epoch * self.train_data_loader.__len__()
                         current_large_loss, current_small_loss = self.wavenet.train(
-                            x.cuda(), 
-                            nonzero.cuda(), 
-                            diff.cuda(), 
-                            nonzero_diff.cuda(),
-                            condition.cuda(), 
+                            x.cuda(non_blocking=True), 
+                            nonzero.cuda(non_blocking=True), 
+                            diff.cuda(non_blocking=True), 
+                            nonzero_diff.cuda(non_blocking=True),
+                            condition.cuda(non_blocking=True), 
                             step=step, train=True
                         )
                         pbar2.set_postfix(ll=current_large_loss, sl=current_small_loss)
@@ -63,11 +63,11 @@ class Trainer():
                     with tqdm(self.test_data_loader, total=self.test_data_loader.__len__(), dynamic_ncols=True) as pbar2:
                         for x, nonzero, diff, nonzero_diff, condition in pbar2:
                             current_large_loss, current_small_loss = self.wavenet.train(
-                                x.cuda(), 
-                                nonzero.cuda(), 
-                                diff.cuda(), 
-                                nonzero_diff.cuda(),
-                                condition.cuda(), 
+                                x.cuda(non_blocking=True), 
+                                nonzero.cuda(non_blocking=True), 
+                                diff.cuda(non_blocking=True), 
+                                nonzero_diff.cuda(non_blocking=True),
+                                condition.cuda(non_blocking=True), 
                                 train=False
                             )
                             train_loss_large += current_large_loss
@@ -93,11 +93,11 @@ class Trainer():
             image = self.wavenet.sample(
                 name, 
                 temperature=self.args.temperature, 
-                init=torch.Tensor(init).cuda(), 
-                nonzero=torch.Tensor(nonzero).cuda(), 
-                diff=torch.Tensor(diff).cuda(), 
-                nonzero_diff=torch.Tensor(nonzero_diff).cuda(), 
-                condition=torch.Tensor(condition).cuda(), 
+                init=torch.Tensor(init).cuda(non_blocking=True), 
+                nonzero=torch.Tensor(nonzero).cuda(non_blocking=True), 
+                diff=torch.Tensor(diff).cuda(non_blocking=True), 
+                nonzero_diff=torch.Tensor(nonzero_diff).cuda(non_blocking=True), 
+                condition=torch.Tensor(condition).cuda(non_blocking=True), 
                 length=self.args.length
             )
         return image
