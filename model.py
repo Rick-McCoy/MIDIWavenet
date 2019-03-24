@@ -73,9 +73,9 @@ class Wavenet:
 
     def _prepare_for_gpu(self):
         if torch.cuda.is_available():
-            self.large_net.cuda(non_blocking=True)
+            self.large_net.cuda()
             self.large_net = torch.nn.DataParallel(self.large_net)
-            self.small_net.cuda(non_blocking=True)
+            self.small_net.cuda()
             self.small_net = torch.nn.DataParallel(self.small_net)
 
     def train(self, x, nonzero, diff, nonzero_diff, condition, step=1, train=True):
@@ -119,10 +119,10 @@ class Wavenet:
 
     def gen_init(self, condition=None):
         channels = [0, 72, 120, 192, 240, 288, 324]
-        output = torch.zeros([1, self.channels, self.large_receptive_field + 2]).cuda(non_blocking=True) # pylint: disable=E1101
+        output = torch.zeros([1, self.channels, self.large_receptive_field + 2]).cuda() # pylint: disable=E1101
         output[:, 324] = 1
         if condition is None:
-            condition = torch.randint(2, size=(7,)).cuda(non_blocking=True) # pylint: disable=E1101
+            condition = torch.randint(2, size=(7,)).cuda() # pylint: disable=E1101
         for i, j in enumerate(condition):
             if j:
                 for _ in range(np.random.randint(0, 4)):
