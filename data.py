@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import torch.utils.data as data
 
 INPUT_LENGTH = 2048
-NON_LENGTH = 512
 with open('pathlist.txt', 'r') as f:
     pathlist = f.readlines()
 pathlist = [x.strip() for x in pathlist]

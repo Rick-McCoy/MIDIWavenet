@@ -53,7 +53,7 @@ class Wavenet:
             self.optimizer.step()
             self.writer.add_scalar('Train/Loss', loss_item, step)
             if step % 20 == 19:
-                self.writer.add_image('Score/Real', target[0].unsqueeze(dim=0), step)
+                self.writer.add_image('Score/Real', x[0, :, -output.shape[2]:].unsqueeze(dim=0), step)
                 self.writer.add_image('Score/Generated', torch.nn.Softmax(output[0].unsqueeze(dim=0)).sigmoid_(), step)
         del loss
         return loss_item
