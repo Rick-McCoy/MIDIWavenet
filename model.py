@@ -54,7 +54,7 @@ class Wavenet:
             self.writer.add_scalar('Train/Loss', loss_item, step)
             if step % 20 == 19:
                 self.writer.add_image('Score/Real', x[0, :, -output.shape[2]:].unsqueeze(dim=0), step)
-                self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=0), step)
+                self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step)
         del loss
         return loss_item
 
@@ -92,13 +92,13 @@ class Wavenet:
         output = init[0, :, -2:]
         inc = 0
         while True:
-            cont = self.net.module.sample_forward(output[:, -2:].unsqueeze(dim=0), condition).squeeze(dim=0)
-            cont = torch.nn.functional.softmax(cont, dim=0)
+            cont = self.net.module.sample_forward(output[:, -2:].unsqueeze(dim=0), condition)
+            cont = torch.nn.functional.softmax(cont, dim=1)
             output = torch.cat((output, cont), dim=-1) # pylint: disable=E1101
             if inc % 20 == 0 and cont[0].detach().cpu().numpy().argmax() == cont[0].shape[0] - 1:
                 break
             inc += 1
-        return output[:, 1:]
+        return output[0, :, 1:]
 
     def save(self, step):
         if not os.path.exists('Checkpoints'):
