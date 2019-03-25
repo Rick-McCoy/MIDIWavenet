@@ -75,7 +75,7 @@ class Trainer():
                                 test_loss += current_loss
                                 pbar2.set_postfix(loss=current_loss)
                         test_loss /= self.test_data_loader.__len__()
-                        pbar1.set_postfix(ll=test_loss)
+                        pbar1.set_postfix(loss=test_loss)
                         end_step = (epoch + 1) * self.train_data_loader.__len__()
                         sampled_image = self.sample(num=1, name=end_step)
                         self.test_writer.add_scalar('Test/Testing loss', test_loss, end_step)
