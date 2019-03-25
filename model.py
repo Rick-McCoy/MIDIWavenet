@@ -30,6 +30,7 @@ class Wavenet:
         self.optimizer = self._optimizer()
         self.writer = writer
         self.total = 0
+        self.acc_loss = 0
 
     def _loss(self):
         loss = torch.nn.CrossEntropyLoss()
@@ -44,18 +45,21 @@ class Wavenet:
             self.net = torch.nn.DataParallel(self.net)
 
     def train(self, x, condition, target, step=1, train=True):
-        output = self.net(x[:, :, :-1], condition)
-        loss = self.loss(output, target[:, -output.shape[2]:])
+        output, loss = self.net(x[:, :, :-1], condition, target)
+        loss = loss.sum()
         loss_item = loss.item()
+        self.acc_loss += loss
         if train:
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            self.writer.add_scalar('Train/Loss', loss_item, step)
+            if step % 4 == 3:
+                self.optimizer.zero_grad()
+                self.acc_loss.backward()
+                self.optimizer.step()
+                self.acc_loss = 0
+                self.writer.add_scalar('Train/Loss', loss_item, step // 4)
             if step % 20 == 19:
-                self.writer.add_image('Score/Real', x[0, :, -output.shape[2]:].unsqueeze(dim=0), step)
-                self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step)
-        del loss
+                self.writer.add_image('Score/Real', x[0, :, -output.shape[2]:].unsqueeze(dim=0), step // 4)
+                self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step // 4)
+        del loss, output
         return loss_item
 
     def sample(self, step, temperature=1., init=None, condition=None):

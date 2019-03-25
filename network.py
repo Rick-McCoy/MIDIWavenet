@@ -157,6 +157,7 @@ class Wavenet(torch.nn.Module):
             condition_channels
         )
         self.post = PostProcess(skip_channels, end_channels, out_channels)
+        self.loss = torch.nn.CrossEntropyLoss()
 
     def calc_receptive_field(self, layer_size, stack_size):
         layers = [2 ** i for i in range(layer_size)] * stack_size
@@ -166,13 +167,14 @@ class Wavenet(torch.nn.Module):
         output_size = x.size()[2] - self.receptive_field
         return output_size
 
-    def forward(self, x, condition):
+    def forward(self, x, condition, target):
         output_size = self.calc_output_size(x)
         dummy = torch.zeros_like(condition, requires_grad=True) # pylint: disable=E1101
         output = checkpoint(self.causal, x, dummy)
         output = self.res_stacks(output, condition, output_size)
         output = self.post(output)
-        return output
+        loss = self.loss(output, target[:, :-output.shape[2]])
+        return output, loss
 
     def sample_forward(self, x, condition):
         output = self.causal(x)[:, :, 1:]
