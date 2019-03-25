@@ -42,7 +42,7 @@ class Wavenet:
 
     def train(self, x, condition, target, step=1, train=True):
         output, loss = self.net(x[:, :, :-1], condition, target)
-        loss = loss.sum()
+        loss = loss.sum() / self.accumulate
         loss_item = loss.item()
         if train:
             loss.backward()
