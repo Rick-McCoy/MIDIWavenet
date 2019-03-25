@@ -73,11 +73,13 @@ def midi_roll(path):
     return data.astype(np.float32), condition.astype(np.float32), target.astype(np.longlong)
 
 def clean(x):
-    return x.argmax(axis=1)
+    return x.argmax(axis=0)
 
 def save_roll(x, step):
+    data = np.zeros((485, x.shape[0]))
+    data[x, np.arange(x.shape[0])] = 1
     fig = plt.figure(figsize=(72, 24))
-    librosa.display.specshow(x, x_axis='time', hop_length=1, sr=96, fmin=pm.note_number_to_hz(12))
+    librosa.display.specshow(data, x_axis='time', hop_length=1, sr=96, fmin=pm.note_number_to_hz(12))
     plt.title('{}'.format(step))
     fig.savefig('Samples/{}.png'.format(step))
     plt.close(fig)
