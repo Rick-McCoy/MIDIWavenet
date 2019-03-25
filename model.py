@@ -61,14 +61,13 @@ class Wavenet:
     def sample(self, step, temperature=1., init=None, condition=None):
         if not os.path.isdir('Samples'):
             os.mkdir('Samples')
-        roll = self.generate(temperature, init, condition).detach().cpu().numpy()
-        roll = clean(roll)
+        image_roll = self.generate(temperature, init, condition).detach().cpu().numpy()
+        roll = clean(image_roll)
         save_roll(roll, step)
         midi = piano_rolls_to_midi(roll)
         midi.write('Samples/{}.mid'.format(step))
         tqdm.write('Saved to Samples/{}.mid'.format(step))
-        roll = np.expand_dims(roll.T, axis=0)
-        return roll
+        return image_roll
 
     def gen_init(self, condition=None):
         channels = [0, 72, 120, 192, 240, 288, 324]
@@ -96,7 +95,7 @@ class Wavenet:
             output = torch.cat((output, cont), dim=-1) # pylint: disable=E1101
             if i % 20 == 0 and cont.squeeze().detach().cpu().numpy().argmax() == cont.squeeze().shape[0] - 1:
                 break
-        return output[0, :, 1:]
+        return output[..., 1:]
 
     def save(self, step):
         if not os.path.exists('Checkpoints'):

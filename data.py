@@ -130,10 +130,10 @@ class DataLoader(data.DataLoader):
 def Test():
     len_list = []
     for i in tqdm(range(1000)):
-        *_, length = midi_roll(pathlist[i])
+        length = midi_roll(pathlist[i])
         len_list.append(length)
     len_list.sort()
-    plt.hist(len_list[:-100], bins=100, cumulative=True, histtype='step')
+    plt.hist(len_list, bins=100, cumulative=True, histtype='step')
     plt.show()
     plt.close()
 
