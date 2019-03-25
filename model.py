@@ -90,14 +90,12 @@ class Wavenet:
         init = init[:, :, -self.receptive_field - 2:]
         self.net.module.fill_queues(init, condition)
         output = init[..., -2:]
-        inc = 0
-        while True:
+        for i in tqdm(range(10000), dynamic_ncols=True):
             cont = self.net.module.sample_forward(output[..., -2:], condition)
             cont = torch.nn.functional.softmax(cont, dim=1)
             output = torch.cat((output, cont), dim=-1) # pylint: disable=E1101
-            if inc % 20 == 0 and cont.squeeze().detach().cpu().numpy().argmax() == cont.squeeze().shape[0] - 1:
+            if i % 20 == 0 and cont.squeeze().detach().cpu().numpy().argmax() == cont.squeeze().shape[0] - 1:
                 break
-            inc += 1
         return output[0, :, 1:]
 
     def save(self, step):
