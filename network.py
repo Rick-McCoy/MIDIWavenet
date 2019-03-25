@@ -173,7 +173,7 @@ class Wavenet(torch.nn.Module):
         output = checkpoint(self.causal, x, dummy)
         output = self.res_stacks(output, condition, output_size)
         output = self.post(output)
-        loss = self.loss(output, target[:, :-output.shape[2]])
+        loss = self.loss(output, target[:, -output.shape[2]:])
         return output, loss
 
     def sample_forward(self, x, condition):

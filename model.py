@@ -26,15 +26,10 @@ class Wavenet:
         self.channels = args.channels
         self.out_channels = args.out_channels
         self.learning_rate = args.learning_rate
-        self.loss = self._loss()
         self.optimizer = self._optimizer()
         self.writer = writer
         self.total = 0
         self.acc_loss = 0
-
-    def _loss(self):
-        loss = torch.nn.CrossEntropyLoss()
-        return loss
 
     def _optimizer(self):
         return torch.optim.Adam(self.net.parameters(), lr=self.learning_rate)
