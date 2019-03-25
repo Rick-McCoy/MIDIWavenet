@@ -73,7 +73,7 @@ def midi_roll(path):
     return data.astype(np.float32), condition.astype(np.float32), target.astype(np.longlong)
 
 def clean(x):
-    return x.argmax(axis=0)
+    return x[0].argmax(axis=0)
 
 def save_roll(x, step):
     data = np.zeros((485, x.shape[0]))
