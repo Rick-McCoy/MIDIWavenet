@@ -114,6 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--sample', type=int, default=0)
     parser.add_argument('--resume', type=int, default=0)
     parser.add_argument('--temperature', type=float, default=1.)
+    parser.add_argument('--accumulate', type=int, default=1)
 
     args = parser.parse_args()
 

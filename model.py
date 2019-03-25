@@ -30,6 +30,7 @@ class Wavenet:
         self.writer = writer
         self.total = 0
         self.acc_loss = 0
+        self.accumulate = args.accumulate
 
     def _optimizer(self):
         return torch.optim.Adam(self.net.parameters(), lr=self.learning_rate)
@@ -45,15 +46,15 @@ class Wavenet:
         loss_item = loss.item()
         self.acc_loss += loss
         if train:
-            if step % 4 == 3:
+            if step % self.accumulate == self.accumulate - 1:
                 self.optimizer.zero_grad()
                 self.acc_loss.backward()
                 self.optimizer.step()
                 self.acc_loss = 0
-                self.writer.add_scalar('Train/Loss', loss_item, step // 4)
+                self.writer.add_scalar('Train/Loss', loss_item, step // self.accumulate)
             if step % 20 == 19:
-                self.writer.add_image('Score/Real', x[0, :, -output.shape[2]:].unsqueeze(dim=0), step // 4)
-                self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step // 4)
+                self.writer.add_image('Score/Real', x[0, :, -output.shape[2]:].unsqueeze(dim=0), step // self.accumulate)
+                self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step // self.accumulate)
         del loss, output
         return loss_item
 
