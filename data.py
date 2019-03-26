@@ -13,7 +13,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import torch.utils.data as data
 
-INPUT_LENGTH = 2048
+INPUT_LENGTH = 4096
 with open('pathlist.txt', 'r') as f:
     pathlist = f.readlines()
 pathlist = [x.strip() for x in pathlist]
@@ -134,7 +134,7 @@ def Test():
         length = midi_roll(pathlist[i])
         len_list.append(length)
     len_list.sort()
-    plt.hist(len_list, bins=100, cumulative=True, histtype='step')
+    plt.hist(len_list[:-50], bins=100, cumulative=True, histtype='step')
     plt.show()
     plt.close()
 
