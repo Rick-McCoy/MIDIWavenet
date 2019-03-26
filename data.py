@@ -13,10 +13,13 @@ import matplotlib
 import matplotlib.pyplot as plt
 import torch.utils.data as data
 
-INPUT_LENGTH = 4096
-with open('pathlist.txt', 'r') as f:
+INPUT_LENGTH = 8192
+with open('lmd_pathlist.txt', 'r') as f:
     pathlist = f.readlines()
 pathlist = [x.strip() for x in pathlist]
+with open('pathlist.txt', 'r') as f:
+    add_pathlist = f.readlines()
+pathlist += [x.strip() for x in add_pathlist]
 #pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
 #pathlist = list(pathlib.Path('Datasets/lmd_matched').glob('**/*.mid'))
 np.random.shuffle(pathlist)
@@ -33,36 +36,21 @@ def midi_roll(path):
         program = inst.program if not inst.is_drum else 128
         condition[program] = 1
         for note in inst.notes:
-            event_list.append((int(note.start * song.resolution), program, note.pitch + 129))
-            event_list.append((int(note.end * song.resolution), program, note.pitch + 257))
+            event_list.append((int(note.start * 200), program, note.pitch + 129))
+            event_list.append((int(note.end * 200), program, note.pitch + 257))
     event_list.sort()
     time_list = []
-    wait_list = []
-    wait_list_indice = []
     for i in event_list:
-        if not time_list or time_list[-1][0] == i[0]:
-            time_list.append(i[:2])
-            time_list.append([i[0], i[2]])
-        else:
-            wait_list_indice.append(len(time_list))
-            wait_list.append(i[0] - time_list[-1][0])
-            time_list.append([i[0], i[0] - time_list[-1][0]])
-            time_list.append(i[:2])
-            time_list.append([i[0], i[2]])
-    wait_list = np.array(wait_list, dtype=np.float32)
-    norm = (wait_list - np.mean(wait_list)) / np.std(wait_list) if np.std(wait_list) else 0
-    max_wait = np.amax(wait_list[norm < 5])
-    wait_list = np.where(norm < 5, wait_list, max_wait)
-    wait_list *= 100 / max_wait
-    wait_list = wait_list.astype(np.int32)
-    for i, j in zip(wait_list_indice, wait_list):
-        time_list[i][-1] = j + 385
+        if time_list and time_list[-1][0] != i[0]:
+            time_list.append([time_list[-1][0], min(i[0] - time_list[-1][0], 200) + 385])
+        time_list.append(i[:2])
+        time_list.append([i[0], i[2]])
     time_list = np.array([i[-1] for i in time_list], dtype=np.int32)
     length = max(INPUT_LENGTH, time_list.shape[0])
     filler = length - time_list.shape[0]
     num = np.random.randint(0, length - INPUT_LENGTH + 1)
     time_list = time_list[num : num + INPUT_LENGTH]
-    data = np.zeros((486, INPUT_LENGTH), dtype=np.bool)
+    data = np.zeros((586, INPUT_LENGTH), dtype=np.bool)
     target = np.zeros((INPUT_LENGTH, ), dtype=np.int32)
     data[time_list, np.arange(time_list.shape[0])] = 1
     if filler:
@@ -77,7 +65,7 @@ def clean(x):
     return x[0].argmax(axis=0)
 
 def save_roll(x, step):
-    data = np.zeros((486, x.shape[0]))
+    data = np.zeros((586, x.shape[0]))
     data[x, np.arange(x.shape[0])] = 1
     fig = plt.figure(figsize=(72, 24))
     librosa.display.specshow(data, x_axis='time', hop_length=1, sr=96, fmin=pm.note_number_to_hz(12))
@@ -85,11 +73,11 @@ def save_roll(x, step):
     fig.savefig('Samples/{}.png'.format(step))
     plt.close(fig)
 
-def piano_rolls_to_midi(x, fs=96):
-    midi = pm.PrettyMIDI(resolution=fs)
+def piano_rolls_to_midi(x, fs=200):
+    midi = pm.PrettyMIDI()
     instruments = [pm.Instrument(i) for i in range(128)] + [pm.Instrument(0, is_drum=True)]
     current_inst = current_pitch = current_time = 0
-    start_time = [[queue.Queue()] * 129] * 128
+    start_time = [[queue.Queue()] * 128] * 129
     for i in x:
         if i < 129:
             current_inst = i
@@ -102,7 +90,7 @@ def piano_rolls_to_midi(x, fs=96):
                 start = start_time[current_inst][current_pitch].get()
                 instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
                                                                 start=start, end=current_time))
-        elif i < 485:
+        elif i < 585:
             time_incr = i - 385
             current_time += time_incr / fs
     for i in range(129):
@@ -119,7 +107,11 @@ class Dataset(data.Dataset):
             self.pathlist = testlist
 
     def __getitem__(self, index):
-        return midi_roll(self.pathlist[index])
+        while True:
+            try:
+                return midi_roll(self.pathlist[np.random.randint(0, len(self.pathlist))])
+            except:
+                continue
 
     def __len__(self):
         return len(self.pathlist)
@@ -129,14 +121,23 @@ class DataLoader(data.DataLoader):
         super(DataLoader, self).__init__(Dataset(train), batch_size, shuffle, num_workers=num_workers, pin_memory=True)
 
 def Test():
-    len_list = []
-    for i in tqdm(range(1000)):
-        length = midi_roll(pathlist[i])
-        len_list.append(length)
-    len_list.sort()
-    plt.hist(len_list[:-50], bins=100, cumulative=True, histtype='step')
-    plt.show()
-    plt.close()
+    # print(len(pathlist))
+    # len_list = []
+    # for _ in tqdm(range(200)):
+    #     while True:
+    #         try:
+    #             length = midi_roll(pathlist[np.random.randint(0, len(pathlist))])
+    #             break
+    #         except:
+    #             continue
+    #     len_list.append(length)
+    # len_list.sort()
+    # plt.hist(len_list[:-20], bins=100, cumulative=True, histtype='step')
+    # plt.show()
+    # plt.close()
+    song = midi_roll('Datasets/lmd_matched/A/X/L/TRAXLZU12903D05F94/1bddc5dbd78f2d242a02a9985bc6b400.mid')
+    midi = piano_rolls_to_midi(song)
+    midi.write('Samples/Never.mid')
 
 if __name__ == '__main__':
     Test()
