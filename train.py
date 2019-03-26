@@ -107,7 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('--skip_channels', type=int, default=256)
     parser.add_argument('--end_channels', type=int, default=256)
     parser.add_argument('--out_channels', type=int, default=486)
-    parser.add_argument('--condition_channels', type=int, default=128)
+    parser.add_argument('--condition_channels', type=int, default=129)
     parser.add_argument('--num_epochs', type=int, default=10000)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--batch_size', type=int, default=4)
