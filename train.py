@@ -50,6 +50,8 @@ class Trainer():
     def run(self):
         with tqdm(range(self.args.num_epochs), dynamic_ncols=True) as pbar1:
             for epoch in pbar1:
+                if epoch and epoch % self.args.decay_accumulate == 0:
+                    self.wavenet.accumulate *= 4
                 with tqdm(self.train_data_loader, total=self.train_data_loader.__len__(), dynamic_ncols=True) as pbar2:
                     for i, (x, condition, target) in enumerate(pbar2):
                         step = i + epoch * self.train_data_loader.__len__()
@@ -115,6 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume', type=int, default=0)
     parser.add_argument('--temperature', type=float, default=1.)
     parser.add_argument('--accumulate', type=int, default=1)
+    parser.add_argument('--decay_accumulate', type=int, default=50)
 
     args = parser.parse_args()
 
