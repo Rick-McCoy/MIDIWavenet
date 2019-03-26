@@ -49,12 +49,12 @@ class Wavenet:
             if step % self.accumulate == self.accumulate - 1:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-                self.writer.add_scalar('Train/Loss', loss_item, step // self.accumulate)
+                self.writer.add_scalar('Train/Loss', loss_item * self.accumulate, step // self.accumulate)
             if step // self.accumulate % 20 == 19:
                 self.writer.add_image('Score/Real', x[0, :, -output.shape[2]:].unsqueeze(dim=0), step // self.accumulate)
                 self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step // self.accumulate)
         del loss, output
-        return loss_item
+        return loss_item * self.accumulate
 
     def sample(self, step, temperature=1., init=None, condition=None):
         if not os.path.isdir('Samples'):
