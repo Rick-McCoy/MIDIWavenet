@@ -28,16 +28,13 @@ def midi_roll(path):
         warnings.simplefilter('ignore')
         song = pm.PrettyMIDI(str(path).replace('\\', '/'))
     event_list = []
-    condition = np.zeros((128), dtype=np.bool)
+    condition = np.zeros((129), dtype=np.bool)
     for inst in song.instruments:
-        program = inst.program if not inst.is_drum else 9
+        program = inst.program if not inst.is_drum else 128
         condition[program] = 1
         for note in inst.notes:
-            #event_list.append((int(note.start * song.resolution), program, program))
-            event_list.append((int(note.start * song.resolution), program, note.pitch + 128))
-            #event_list.append((int(note.end * song.resolution), program, program))
-            event_list.append((int(note.end * song.resolution), program, note.pitch + 256))
-    #event_list = list(set(event_list))
+            event_list.append((int(note.start * song.resolution), program, note.pitch + 129))
+            event_list.append((int(note.end * song.resolution), program, note.pitch + 257))
     event_list.sort()
     time_list = []
     wait_list = []
@@ -59,13 +56,13 @@ def midi_roll(path):
     wait_list *= 100 / max_wait
     wait_list = wait_list.astype(np.int32)
     for i, j in zip(wait_list_indice, wait_list):
-        time_list[i][1] = j + 384
+        time_list[i][-1] = j + 385
     time_list = np.array([i[-1] for i in time_list], dtype=np.int32)
     length = max(INPUT_LENGTH, time_list.shape[0])
     filler = length - time_list.shape[0]
     num = np.random.randint(0, length - INPUT_LENGTH + 1)
     time_list = time_list[num : num + INPUT_LENGTH]
-    data = np.zeros((485, INPUT_LENGTH), dtype=np.bool)
+    data = np.zeros((486, INPUT_LENGTH), dtype=np.bool)
     target = np.zeros((INPUT_LENGTH, ), dtype=np.int32)
     data[time_list, np.arange(time_list.shape[0])] = 1
     if filler:
@@ -80,7 +77,7 @@ def clean(x):
     return x[0].argmax(axis=0)
 
 def save_roll(x, step):
-    data = np.zeros((485, x.shape[0]))
+    data = np.zeros((486, x.shape[0]))
     data[x, np.arange(x.shape[0])] = 1
     fig = plt.figure(figsize=(72, 24))
     librosa.display.specshow(data, x_axis='time', hop_length=1, sr=96, fmin=pm.note_number_to_hz(12))
@@ -90,27 +87,26 @@ def save_roll(x, step):
 
 def piano_rolls_to_midi(x, fs=96):
     midi = pm.PrettyMIDI(resolution=fs)
-    condition = [i in x for i in range(128)]
-    instruments = [pm.Instrument(i, is_drum=i == 9) for i in range(128)]
+    instruments = [pm.Instrument(i) for i in range(128)] + [pm.Instrument(0, is_drum=True)]
     current_inst = current_pitch = current_time = 0
-    start_time = [[queue.Queue()] * 128] * 128
+    start_time = [[queue.Queue()] * 129] * 128
     for i in x:
-        if i < 128:
+        if i < 129:
             current_inst = i
-        elif i < 256:
-            current_pitch = i - 128
+        elif i < 257:
+            current_pitch = i - 129
             start_time[current_inst][current_pitch].put(current_time)
-        elif i < 384:
-            current_pitch = i - 256
+        elif i < 385:
+            current_pitch = i - 257
             if not start_time[current_inst][current_time].empty():
                 start = start_time[current_inst][current_time].get()
                 instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
                                                                 start=start, end=current_time))
-        elif i < 484:
-            time_incr = i - 384
+        elif i < 485:
+            time_incr = i - 385
             current_time += time_incr / fs
-    for i, j in enumerate(condition):
-        if j:
+    for i in range(129):
+        if instruments[i].notes:
             midi.instruments.append(instruments[i])
     return midi
 
