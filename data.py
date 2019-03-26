@@ -1,5 +1,6 @@
 import os
 import pathlib
+import queue
 from tqdm.autonotebook import tqdm
 import pretty_midi as pm
 import numpy as np
@@ -32,22 +33,25 @@ def midi_roll(path):
         program = inst.program if not inst.is_drum else 9
         condition[program] = 1
         for note in inst.notes:
-            event_list.append((int(note.start * song.resolution), program))
-            event_list.append((int(note.start * song.resolution), note.pitch + 128))
-            event_list.append((int(note.end * song.resolution), program))
-            event_list.append((int(note.end * song.resolution), note.pitch + 256))
-    event_list = list(set(event_list))
+            #event_list.append((int(note.start * song.resolution), program, program))
+            event_list.append((int(note.start * song.resolution), program, note.pitch + 128))
+            #event_list.append((int(note.end * song.resolution), program, program))
+            event_list.append((int(note.end * song.resolution), program, note.pitch + 256))
+    #event_list = list(set(event_list))
     event_list.sort()
     time_list = []
     wait_list = []
     wait_list_indice = []
     for i in event_list:
         if not time_list or time_list[-1][0] == i[0]:
-            time_list.append(i)
+            time_list.append(i[:2])
+            time_list.append([i[0], i[2]])
         else:
             wait_list_indice.append(len(time_list))
             wait_list.append(i[0] - time_list[-1][0])
             time_list.append([i[0], i[0] - time_list[-1][0]])
+            time_list.append(i[:2])
+            time_list.append([i[0], i[2]])
     wait_list = np.array(wait_list, dtype=np.float32)
     norm = (wait_list - np.mean(wait_list)) / np.std(wait_list) if np.std(wait_list) else 0
     max_wait = np.amax(wait_list[norm < 5])
@@ -56,7 +60,7 @@ def midi_roll(path):
     wait_list = wait_list.astype(np.int32)
     for i, j in zip(wait_list_indice, wait_list):
         time_list[i][1] = j + 384
-    time_list = np.array([i[1] for i in time_list], dtype=np.int32)
+    time_list = np.array([i[-1] for i in time_list], dtype=np.int32)
     length = max(INPUT_LENGTH, time_list.shape[0])
     filler = length - time_list.shape[0]
     num = np.random.randint(0, length - INPUT_LENGTH + 1)
@@ -89,18 +93,19 @@ def piano_rolls_to_midi(x, fs=96):
     condition = [i in x for i in range(128)]
     instruments = [pm.Instrument(i, is_drum=i == 9) for i in range(128)]
     current_inst = current_pitch = current_time = 0
-    start_time = np.zeros((128, 128))
+    start_time = [[queue.Queue()] * 128] * 128
     for i in x:
         if i < 128:
             current_inst = i
         elif i < 256:
             current_pitch = i - 128
-            start_time[current_inst, current_pitch] = current_time
+            start_time[current_inst][current_pitch].put(current_time)
         elif i < 384:
             current_pitch = i - 256
-            instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
-                                                            start=start_time[current_inst, current_pitch], \
-                                                            end=current_time))
+            if not start_time[current_inst][current_time].empty():
+                start = start_time[current_inst][current_time].get()
+                instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
+                                                                start=start, end=current_time))
         elif i < 484:
             time_incr = i - 384
             current_time += time_incr / fs
