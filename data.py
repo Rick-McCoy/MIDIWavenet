@@ -98,8 +98,8 @@ def piano_rolls_to_midi(x, fs=96):
             start_time[current_inst][current_pitch].put(current_time)
         elif i < 385:
             current_pitch = i - 257
-            if not start_time[current_inst][current_time].empty():
-                start = start_time[current_inst][current_time].get()
+            if not start_time[current_inst][current_pitch].empty():
+                start = start_time[current_inst][current_pitch].get()
                 instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
                                                                 start=start, end=current_time))
         elif i < 485:
