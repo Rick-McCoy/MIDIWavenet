@@ -109,8 +109,10 @@ class Dataset(data.Dataset):
     def __getitem__(self, index):
         while True:
             try:
-                return midi_roll(self.pathlist[np.random.randint(0, len(self.pathlist))])
+                path = self.pathlist[np.random.randint(0, len(self.pathlist))]
+                return midi_roll(path)
             except:
+                tqdm.write(path)
                 continue
 
     def __len__(self):
