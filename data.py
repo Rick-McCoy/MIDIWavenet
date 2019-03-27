@@ -119,7 +119,7 @@ class Dataset(data.Dataset):
         return len(self.pathlist)
 
 def init_fn(worker_id):
-    np.random.seed(worker_id + torch.initial_seed())
+    np.random.RandomState(worker_id + torch.initial_seed()) # pylint: disable=E1101
 
 class DataLoader(data.DataLoader):
     def __init__(self, batch_size, shuffle=True, num_workers=16, train=True):
