@@ -118,9 +118,16 @@ class Dataset(data.Dataset):
     def __len__(self):
         return len(self.pathlist)
 
+def init_fn(worker_id):
+    np.random.seed(worker_id + torch.initial_seed())
+
 class DataLoader(data.DataLoader):
     def __init__(self, batch_size, shuffle=True, num_workers=16, train=True):
-        super(DataLoader, self).__init__(Dataset(train), batch_size, shuffle, num_workers=num_workers, pin_memory=True)
+        super(DataLoader, self).__init__(Dataset(train), \
+                                            batch_size, shuffle, \
+                                            num_workers=num_workers, \
+                                            pin_memory=True, \
+                                            worker_init_fn=init_fn)
 
 def Test():
     # print(len(pathlist))
