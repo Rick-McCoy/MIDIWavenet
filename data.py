@@ -20,8 +20,6 @@ pathlist = [x.strip() for x in pathlist]
 with open('pathlist.txt', 'r') as f:
     add_pathlist = f.readlines()
 pathlist += [x.strip() for x in add_pathlist]
-#pathlist = list(pathlib.Path('Datasets/Classics').glob('**/*.mid')) + list(pathlib.Path('Datasets/Classics').glob('**/*.MID'))
-#pathlist = list(pathlib.Path('Datasets/lmd_matched').glob('**/*.mid'))
 np.random.shuffle(pathlist)
 trainlist = pathlist[:-1024]
 testlist = pathlist[-1024:]

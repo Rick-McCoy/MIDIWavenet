@@ -34,6 +34,8 @@ class Trainer():
             args.num_workers, 
             False
         )
+        self.train_range = self.train_data_loader.__len__()
+        self.test_range = self.test_data_loader.__len__()
         self.wavenet.total = self.train_data_loader.__len__() * self.args.num_epochs
         self.load_last_checkpoint(self.args.resume)
     
@@ -52,7 +54,7 @@ class Trainer():
             for epoch in pbar1:
                 if epoch and epoch % self.args.decay_accumulate == 0:
                     self.wavenet.accumulate *= 4
-                with tqdm(self.train_data_loader, total=self.train_data_loader.__len__(), dynamic_ncols=True) as pbar2:
+                with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True) as pbar2:
                     for i, (x, condition, target) in enumerate(pbar2):
                         step = i + epoch * self.train_data_loader.__len__()
                         current_loss = self.wavenet.train(
@@ -62,33 +64,35 @@ class Trainer():
                             step=step, train=True
                         )
                         pbar2.set_postfix(loss=current_loss)
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore')
-                    with torch.no_grad():
-                        test_loss = 0
-                        with tqdm(self.test_data_loader, total=self.test_data_loader.__len__(), dynamic_ncols=True) as pbar2:
-                            for x, condition, target in pbar2:
-                                current_loss = self.wavenet.train(
-                                    x.cuda(non_blocking=True), 
-                                    condition.cuda(non_blocking=True), 
-                                    target.cuda(non_blocking=True), 
-                                    train=False
-                                )
-                                test_loss += current_loss
-                                pbar2.set_postfix(loss=current_loss)
-                        test_loss /= self.test_data_loader.__len__()
-                        pbar1.set_postfix(loss=test_loss)
-                        end_step = (epoch + 1) * self.train_data_loader.__len__()
-                        sampled_image = self.sample(num=1, name=end_step)
-                        self.test_writer.add_scalar('Test/Testing loss', test_loss, end_step)
-                        self.test_writer.add_image('Score/Sampled', sampled_image, end_step)
-                        self.wavenet.save(end_step)
+                    del x, condition, target
+                    if step % self.args.sample_step == self.args.sample_step - 1:
+                        with warnings.catch_warnings():
+                            warnings.simplefilter('ignore')
+                            with torch.no_grad():
+                                test_loss = 0
+                                with tqdm(self.test_data_loader, total=self.test_range, dynamic_ncols=True) as pbar2:
+                                    for x, condition, target in pbar2:
+                                        current_loss = self.wavenet.train(
+                                            x.cuda(non_blocking=True), 
+                                            condition.cuda(non_blocking=True), 
+                                            target.cuda(non_blocking=True), 
+                                            train=False
+                                        )
+                                        test_loss += current_loss
+                                        pbar2.set_postfix(loss=current_loss)
+                                        del x, condition, target
+                                test_loss /= self.test_range
+                                pbar1.set_postfix(loss=test_loss)
+                                sampled_image = self.sample(num=1, name=step)
+                                self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
+                                self.test_writer.add_image('Score/Sampled', sampled_image, step)
+                                self.wavenet.save(step)
         self.test_writer.close()
         self.train_writer.close()
 
     def sample(self, num, name='Sample_{}'.format(int(time.time()))):
         for _ in tqdm(range(num), dynamic_ncols=True):
-            x, condition, _ = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_data_loader.__len__()))
+            x, condition, _ = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_range))
             image = self.wavenet.sample(
                 name, 
                 temperature=self.args.temperature, 
@@ -118,6 +122,7 @@ if __name__ == '__main__':
     parser.add_argument('--temperature', type=float, default=1.)
     parser.add_argument('--accumulate', type=int, default=1)
     parser.add_argument('--decay_accumulate', type=int, default=50)
+    parser.add_argument('--sample_step', type=int, default=1000)
 
     args = parser.parse_args()
 
