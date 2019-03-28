@@ -64,29 +64,27 @@ class Trainer():
                             step=step, train=True
                         )
                         pbar2.set_postfix(loss=current_loss)
-                    del x, condition, target
-                    if step % self.args.sample_step == self.args.sample_step - 1:
-                        with warnings.catch_warnings():
-                            warnings.simplefilter('ignore')
-                            with torch.no_grad():
-                                test_loss = 0
-                                with tqdm(self.test_data_loader, total=self.test_range, dynamic_ncols=True) as pbar2:
-                                    for x, condition, target in pbar2:
-                                        current_loss = self.wavenet.train(
-                                            x.cuda(non_blocking=True), 
-                                            condition.cuda(non_blocking=True), 
-                                            target.cuda(non_blocking=True), 
-                                            train=False
-                                        )
-                                        test_loss += current_loss
-                                        pbar2.set_postfix(loss=current_loss)
-                                        del x, condition, target
-                                test_loss /= self.test_range
-                                pbar1.set_postfix(loss=test_loss)
-                                sampled_image = self.sample(num=1, name=step)
-                                self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
-                                self.test_writer.add_image('Score/Sampled', sampled_image, step)
-                                self.wavenet.save(step)
+                        if step % self.args.sample_step == self.args.sample_step - 1:
+                            with warnings.catch_warnings():
+                                warnings.simplefilter('ignore')
+                                with torch.no_grad():
+                                    test_loss = 0
+                                    with tqdm(self.test_data_loader, total=self.test_range, dynamic_ncols=True) as pbar2:
+                                        for x, condition, target in pbar2:
+                                            current_loss = self.wavenet.train(
+                                                x.cuda(non_blocking=True), 
+                                                condition.cuda(non_blocking=True), 
+                                                target.cuda(non_blocking=True), 
+                                                train=False
+                                            )
+                                            test_loss += current_loss
+                                            pbar2.set_postfix(loss=current_loss)
+                                    test_loss /= self.test_range
+                                    pbar1.set_postfix(loss=test_loss)
+                                    sampled_image = self.sample(num=1, name=step)
+                                    self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
+                                    self.test_writer.add_image('Score/Sampled', sampled_image, step)
+                                    self.wavenet.save(step)
         self.test_writer.close()
         self.train_writer.close()
 
