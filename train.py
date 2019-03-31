@@ -37,6 +37,7 @@ class Trainer():
         self.train_range = self.train_data_loader.__len__()
         self.test_range = self.test_data_loader.__len__()
         self.wavenet.total = self.train_data_loader.__len__() * self.args.num_epochs
+        self.start = 0
         self.load_last_checkpoint(self.args.resume)
     
     def load_last_checkpoint(self, resume=0):
@@ -47,16 +48,19 @@ class Trainer():
             checkpoint_list = [str(i) for i in checkpoint_list]
             if len(checkpoint_list) > 0:
                 checkpoint_list.sort(key=natural_sort_key)
-                self.wavenet.load(str(checkpoint_list[-1]))
+                start = self.wavenet.load(str(checkpoint_list[-1]))
+                self.start = start
+                self.start_1 = start // self.train_data_loader.__len__()
+                self.start_2 = start % self.train_data_loader.__len__()
 
     def run(self):
-        with tqdm(range(self.args.num_epochs), dynamic_ncols=True) as pbar1:
+        step = self.start
+        with tqdm(range(self.args.num_epochs), dynamic_ncols=True, initial=self.start_1) as pbar1:
             for epoch in pbar1:
                 if epoch and epoch % self.args.decay_accumulate == 0:
                     self.wavenet.accumulate *= 4
-                with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True) as pbar2:
-                    for i, (x, condition, target) in enumerate(pbar2):
-                        step = i + epoch * self.train_data_loader.__len__()
+                with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True, initial=self.start_2) as pbar2:
+                    for x, condition, target in pbar2:
                         current_loss = self.wavenet.train(
                             x.cuda(non_blocking=True), 
                             condition.cuda(non_blocking=True), 
@@ -85,6 +89,7 @@ class Trainer():
                                     self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
                                     self.test_writer.add_image('Score/Sampled', sampled_image, step)
                                     self.wavenet.save(step)
+                        step += 1
         self.test_writer.close()
         self.train_writer.close()
 

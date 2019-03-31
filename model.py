@@ -98,8 +98,12 @@ class Wavenet:
     def save(self, step):
         if not os.path.exists('Checkpoints'):
             os.mkdir('Checkpoints')
-        torch.save(self.net.state_dict(), 'Checkpoints/{}.pkl'.format(step))
+        state = {'model': self.net.state_dict(), 'step': step + 1, 'optimizer': self.optimizer.state_dict()}
+        torch.save(state, 'Checkpoints/{}.pkl'.format(step))
     
     def load(self, path):
         tqdm.write('Loading from {}'.format(path))
-        self.net.load_state_dict(torch.load(path))
+        load = torch.load(path)
+        self.net.load_state_dict(load['model'])
+        self.optimizer.load_state_dict(load['optimizer'])
+        return load['step']
