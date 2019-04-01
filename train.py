@@ -38,6 +38,8 @@ class Trainer():
         self.test_range = self.test_data_loader.__len__()
         self.wavenet.total = self.train_data_loader.__len__() * self.args.num_epochs
         self.start = 0
+        self.start_1 = 0
+        self.start_2 = 0
         self.load_last_checkpoint(self.args.resume)
     
     def load_last_checkpoint(self, resume=0):
