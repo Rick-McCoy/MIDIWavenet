@@ -29,7 +29,6 @@ class Wavenet:
         self.optimizer = self._optimizer()
         self.optimizer.zero_grad()
         self.writer = writer
-        self.total = 0
         self.accumulate = args.accumulate
 
     def _optimizer(self):

@@ -38,18 +38,20 @@ def midi_roll(path):
             event_list.append((int(note.end * 200), program, note.pitch + 257))
     event_list.sort()
     time_list = []
+    current_time = 0
     for i in event_list:
-        if time_list and time_list[-1][0] != i[0]:
-            time_list.append([time_list[-1][0], min(i[0] - time_list[-1][0], 200) + 385])
-        time_list.append(i[:2])
-        time_list.append([i[0], i[2]])
-    time_list = np.array([i[-1] for i in time_list], dtype=np.int32)
+        if current_time != i[0]:
+            time_list.append(min(i[0] - current_time, 200) + 385)
+            current_time = i[0]
+        time_list.append(i[1])
+        time_list.append(i[2])
+    time_list = np.array(time_list, dtype=np.longlong)
     length = max(INPUT_LENGTH, time_list.shape[0])
     filler = length - time_list.shape[0]
     num = np.random.randint(0, length - INPUT_LENGTH + 1)
     time_list = time_list[num : num + INPUT_LENGTH]
     data = np.zeros((586, INPUT_LENGTH), dtype=np.bool)
-    target = np.zeros((INPUT_LENGTH, ), dtype=np.int32)
+    target = np.zeros((INPUT_LENGTH, ), dtype=np.longlong)
     data[time_list, np.arange(time_list.shape[0])] = 1
     if filler:
         data[-1, -filler:] = 1
@@ -57,7 +59,7 @@ def midi_roll(path):
         target[:-filler] = time_list
     else:
         target = time_list
-    return data.astype(np.float32), condition.astype(np.float32), target.astype(np.longlong)
+    return data.astype(np.float32), condition.astype(np.float32), target
 
 def clean(x):
     return x[0].argmax(axis=0)
@@ -97,12 +99,13 @@ def piano_rolls_to_midi(x, fs=200):
     return midi
 
 class Dataset(data.Dataset):
-    def __init__(self, train):
+    def __init__(self, train, length=None):
         super(Dataset, self).__init__()
         if train:
             self.pathlist = trainlist
         else:
             self.pathlist = testlist
+        self.len = length
 
     def __getitem__(self, index):
         while True:
@@ -114,14 +117,16 @@ class Dataset(data.Dataset):
                 continue
 
     def __len__(self):
-        return len(self.pathlist)
+        if self.len is None:
+            return len(self.pathlist)
+        return self.len
 
 def init_fn(worker_id):
     np.random.seed(torch.initial_seed() % (2 ** 32))
 
 class DataLoader(data.DataLoader):
-    def __init__(self, batch_size, shuffle=True, num_workers=16, train=True):
-        super(DataLoader, self).__init__(Dataset(train), \
+    def __init__(self, batch_size, shuffle=True, num_workers=16, train=True, length=None):
+        super(DataLoader, self).__init__(Dataset(train, length), \
                                             batch_size, shuffle, \
                                             num_workers=num_workers, \
                                             pin_memory=True, \

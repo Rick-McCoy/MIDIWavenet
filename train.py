@@ -36,7 +36,6 @@ class Trainer():
         )
         self.train_range = self.train_data_loader.__len__()
         self.test_range = self.test_data_loader.__len__()
-        self.wavenet.total = self.train_data_loader.__len__() * self.args.num_epochs
         self.start = 0
         self.start_1 = 0
         self.start_2 = 0
@@ -57,41 +56,40 @@ class Trainer():
 
     def run(self):
         step = self.start
-        with tqdm(range(self.args.num_epochs), dynamic_ncols=True, initial=self.start_1) as pbar1:
-            for epoch in pbar1:
-                if epoch and epoch % self.args.decay_accumulate == 0:
-                    self.wavenet.accumulate *= 4
-                with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True, initial=self.start_2) as pbar2:
-                    for x, condition, target in pbar2:
-                        current_loss = self.wavenet.train(
-                            x.cuda(non_blocking=True), 
-                            condition.cuda(non_blocking=True), 
-                            target.cuda(non_blocking=True), 
-                            step=step, train=True
-                        )
-                        pbar2.set_postfix(loss=current_loss)
-                        if step % self.args.sample_step == self.args.sample_step - 1:
-                            with warnings.catch_warnings():
-                                warnings.simplefilter('ignore')
-                                with torch.no_grad():
-                                    test_loss = 0
-                                    with tqdm(self.test_data_loader, total=self.test_range, dynamic_ncols=True) as pbar2:
-                                        for x, condition, target in pbar2:
-                                            current_loss = self.wavenet.train(
-                                                x.cuda(non_blocking=True), 
-                                                condition.cuda(non_blocking=True), 
-                                                target.cuda(non_blocking=True), 
-                                                train=False
-                                            )
-                                            test_loss += current_loss
-                                            pbar2.set_postfix(loss=current_loss)
-                                    test_loss /= self.test_range
-                                    pbar1.set_postfix(loss=test_loss)
-                                    sampled_image = self.sample(num=1, name=step)
-                                    self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
-                                    self.test_writer.add_image('Score/Sampled', sampled_image, step)
-                                    self.wavenet.save(step)
-                        step += 1
+        with warnings.catch_warnings:
+            warnings.simplefilter('ignore')
+            with tqdm(range(self.args.num_epochs), dynamic_ncols=True, initial=self.start_1) as pbar1:
+                for epoch in pbar1:
+                    if epoch and epoch % self.args.decay_accumulate == 0:
+                        self.wavenet.accumulate *= 4
+                    with tqdm(self.train_data_loader, total=self.args.sample_step, dynamic_ncols=True, initial=self.start_2) as pbar2:
+                        for x, condition, target in pbar2:
+                            current_loss = self.wavenet.train(
+                                x.cuda(non_blocking=True), 
+                                condition.cuda(non_blocking=True), 
+                                target.cuda(non_blocking=True), 
+                                step=step, train=True
+                            )
+                            pbar2.set_postfix(loss=current_loss)
+                            step += 1
+                    with torch.no_grad():
+                        test_loss = 0
+                        with tqdm(self.test_data_loader, total=self.test_range, dynamic_ncols=True) as pbar3:
+                            for x, condition, target in pbar3:
+                                current_loss = self.wavenet.train(
+                                    x.cuda(non_blocking=True), 
+                                    condition.cuda(non_blocking=True), 
+                                    target.cuda(non_blocking=True), 
+                                    train=False
+                                )
+                                test_loss += current_loss
+                                pbar3.set_postfix(loss=current_loss)
+                        test_loss /= self.test_range
+                        pbar1.set_postfix(loss=test_loss)
+                        sampled_image = self.sample(num=1, name=step)
+                        self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
+                        self.test_writer.add_image('Score/Sampled', sampled_image, step)
+                        self.wavenet.save(step)
         self.test_writer.close()
         self.train_writer.close()
 
