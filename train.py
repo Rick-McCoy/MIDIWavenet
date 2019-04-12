@@ -7,7 +7,6 @@ import torch
 import pathlib
 import time
 import warnings
-import numpy as np
 from tqdm.autonotebook import tqdm
 from model import Wavenet
 from data import DataLoader
@@ -26,7 +25,8 @@ class Trainer():
             args.batch_size * torch.cuda.device_count(), 
             args.shuffle, 
             args.num_workers, 
-            True
+            True, 
+            self.args.sample_step * args.batch_size * torch.cuda.device_count()
         )
         self.test_data_loader = DataLoader(
             args.batch_size * torch.cuda.device_count(), 
@@ -56,21 +56,25 @@ class Trainer():
 
     def run(self):
         step = self.start
-        with warnings.catch_warnings:
+        with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             with tqdm(range(self.args.num_epochs), dynamic_ncols=True, initial=self.start_1) as pbar1:
                 for epoch in pbar1:
                     if epoch and epoch % self.args.decay_accumulate == 0:
                         self.wavenet.accumulate *= 4
-                    with tqdm(self.train_data_loader, total=self.args.sample_step, dynamic_ncols=True, initial=self.start_2) as pbar2:
+                    with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True, initial=self.start_2) as pbar2:
                         for x, condition, target in pbar2:
                             current_loss = self.wavenet.train(
                                 x.cuda(non_blocking=True), 
                                 condition.cuda(non_blocking=True), 
                                 target.cuda(non_blocking=True), 
                                 step=step, train=True
-                            )
-                            pbar2.set_postfix(loss=current_loss)
+                            ).sum()
+                            current_loss.backward()
+                            if step % self.args.accumulate == self.args.accumulate - 1:
+                                self.wavenet.optimizer.step()
+                                self.wavenet.optimizer.zero_grad()
+                            pbar2.set_postfix(loss=current_loss.item())
                             step += 1
                     with torch.no_grad():
                         test_loss = 0
@@ -95,7 +99,7 @@ class Trainer():
 
     def sample(self, num, name='Sample_{}'.format(int(time.time()))):
         for _ in tqdm(range(num), dynamic_ncols=True):
-            x, condition, _ = self.train_data_loader.dataset.__getitem__(np.random.randint(self.train_range))
+            x, condition, _ = self.train_data_loader.dataset.__getitem__(0)
             image = self.wavenet.sample(
                 name, 
                 temperature=self.args.temperature, 
@@ -117,7 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--condition_channels', type=int, default=129)
     parser.add_argument('--num_epochs', type=int, default=10000)
     parser.add_argument('--learning_rate', type=float, default=0.001)
-    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--shuffle', type=bool, default=True)
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--sample', type=int, default=0)

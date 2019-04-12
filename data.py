@@ -9,7 +9,7 @@ import warnings
 import librosa.display
 import time
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import torch.utils.data as data
 
@@ -147,9 +147,27 @@ def Test():
     # plt.hist(len_list[:-20], bins=100, cumulative=True, histtype='step')
     # plt.show()
     # plt.close()
-    song = midi_roll('Datasets/lmd_matched/A/X/L/TRAXLZU12903D05F94/1bddc5dbd78f2d242a02a9985bc6b400.mid')
-    midi = piano_rolls_to_midi(song)
-    midi.write('Samples/Never.mid')
+    #song = midi_roll('Datasets/lmd_matched/A/X/L/TRAXLZU12903D05F94/1bddc5dbd78f2d242a02a9985bc6b400.mid')
+    #midi = piano_rolls_to_midi(song)
+    #midi.write('Samples/Never.mid')
+    time_list = []
+    for _ in tqdm(range(100)):
+        while True:
+            try:
+                time_list_datum = midi_roll(pathlist[np.random.randint(0, len(pathlist))])
+                break
+            except:
+                continue
+        time_list += time_list_datum
+    time_list.sort()
+    time_list = time_list[:-len(time_list) // 100]
+    print(min(time_list))
+    print(max(time_list))
+    bins = np.exp(np.arange(np.log(min(time_list)), np.log(max(time_list)), (np.log(max(time_list)) - np.log(min(time_list))) / 1000))
+    plt.xscale('log', nonposx='clip')
+    plt.hist(time_list, bins=bins, cumulative=True, histtype='step')
+    plt.show()
+    plt.close()
 
 if __name__ == '__main__':
     Test()
