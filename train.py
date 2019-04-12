@@ -85,7 +85,7 @@ class Trainer():
                                     condition.cuda(non_blocking=True), 
                                     target.cuda(non_blocking=True), 
                                     train=False
-                                )
+                                ).sum().item()
                                 test_loss += current_loss
                                 pbar3.set_postfix(loss=current_loss)
                         test_loss /= self.test_range
