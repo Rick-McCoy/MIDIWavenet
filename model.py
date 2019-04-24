@@ -19,7 +19,8 @@ class Wavenet:
             args.skip_channels, 
             args.end_channels, 
             args.out_channels, 
-            args.condition_channels
+            args.condition_channels, 
+            args.kernel_size
         )
         self.receptive_field = self.net.receptive_field
         self._prepare_for_gpu()
@@ -72,7 +73,7 @@ class Wavenet:
             if j:
                 for _ in range(np.random.randint(0, 4)):
                     output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
-        return output, condition # pylint: disable=E1101
+        return output, condition
 
     def generate(self, temperature=1., init=None, condition=None):
         if init is None:

@@ -15,29 +15,29 @@ class CausalConv1d(torch.nn.Module):
         return output
 
 class DilatedCausalConv1d(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, dilation):
+    def __init__(self, in_channels, out_channels, kernel_size, dilation):
         super(DilatedCausalConv1d, self).__init__()
         self.conv = torch.nn.Conv1d(in_channels, out_channels, 
-                                    kernel_size=2, dilation=dilation, 
+                                    kernel_size=kernel_size, dilation=dilation, 
                                     bias=False)
         self.sample_conv = torch.nn.Conv1d(in_channels, out_channels, 
-                                    kernel_size=2, bias=False)
+                                    kernel_size=kernel_size, bias=False)
         self.sample_conv.weight = self.conv.weight
 
     def forward(self, x, sample=False):
         return self.sample_conv(x) if sample else self.conv(x)
 
 class ResidualBlock(torch.nn.Module):
-    def __init__(self, residual_channels, dilation_channels, skip_channels, condition_channels, dilation):
+    def __init__(self, residual_channels, dilation_channels, skip_channels, condition_channels, kernel_size, dilation):
         super(ResidualBlock, self).__init__()
         self.dilation = dilation
-        self.filter_conv = DilatedCausalConv1d(residual_channels, dilation_channels, dilation=dilation)
-        self.gate_conv = DilatedCausalConv1d(residual_channels, dilation_channels, dilation=dilation)
+        self.filter_conv = DilatedCausalConv1d(residual_channels, dilation_channels, kernel_size, dilation=dilation)
+        self.gate_conv = DilatedCausalConv1d(residual_channels, dilation_channels, kernel_size, dilation=dilation)
         self.conditional_filter_linear = torch.nn.Linear(condition_channels, dilation_channels)
         self.conditional_gate_linear = torch.nn.Linear(condition_channels, dilation_channels)
         self.residual_conv = torch.nn.Conv1d(dilation_channels, residual_channels, 1)
         self.skip_conv = torch.nn.Conv1d(dilation_channels, skip_channels, 1)
-        self.queue = queue.Queue(dilation)
+        self.queues = [queue.Queue(dilation * i) for i in range(1, dilation + 1)]
         self.skip_size = 1
 
     def forward(self, x, condition, sample=False):
@@ -63,7 +63,8 @@ class ResidualStack(torch.nn.Module):
             residual_channels, 
             dilation_channels, 
             skip_channels, 
-            condition_channels
+            condition_channels, 
+            kernel_size
         ):
         super(ResidualStack, self).__init__()
         self.layer_size = layer_size
@@ -74,16 +75,18 @@ class ResidualStack(torch.nn.Module):
                 residual_channels, 
                 dilation_channels, 
                 skip_channels, 
-                condition_channels
+                condition_channels, 
+                kernel_size
             )
         )
 
-    def stack_res_blocks(self, residual_channels, dilation_channels, skip_channels, condition_channels):
+    def stack_res_blocks(self, residual_channels, dilation_channels, skip_channels, condition_channels, kernel_size):
         res_blocks = [ResidualBlock(
             residual_channels, 
             dilation_channels, 
             skip_channels, 
             condition_channels, 
+            kernel_size, 
             dilation
         ) for dilation in self.dilations]
         return res_blocks
@@ -100,20 +103,22 @@ class ResidualStack(torch.nn.Module):
         res_sum = 0
         for res_block in self.res_blocks:
             res_block.skip_size = 1
-            top = res_block.queue.get()
-            res_block.queue.put(x)
-            full = torch.cat((top, x), dim=-1) # pylint: disable=E1101
-            x, skip = res_block(full, condition, sample=True)
+            for que in res_block.queues:
+                top = que.get()
+                que.put(x)
+                x = torch.cat((top, x), dim=-1) # pylint: disable=E1101
+            x, skip = res_block(x, condition, sample=True)
             res_sum += skip
         return res_sum
 
     def fill_queues(self, x, condition):
         for res_block in self.res_blocks:
             res_block.skip_size = 1
-            with res_block.queue.mutex:
-                res_block.queue.queue.clear()
-            for i in range(-res_block.dilation - 1, -1):
-                res_block.queue.put(x[:, :, i:i + 1])
+            for que, j in zip(res_block.queues, range(1, len(res_block.queues) + 2)):
+                with que.mutex:
+                    que.queue.clear()
+                for i in range((-res_block.dilation - 1) * j, -1):
+                    que.put(x[:, :, i:i + 1])
             x, _ = res_block(x, condition)
 
 class PostProcess(torch.nn.Module):
@@ -141,10 +146,11 @@ class Wavenet(torch.nn.Module):
             skip_channels, 
             end_channels, 
             out_channels, 
-            condition_channels
+            condition_channels, 
+            kernel_size
         ):
         super(Wavenet, self).__init__()
-        self.receptive_field = self.calc_receptive_field(layer_size, stack_size)
+        self.receptive_field = self.calc_receptive_field(layer_size, stack_size, kernel_size)
         self.embedding = torch.nn.Embedding(channels, channels)
         self.causal = CausalConv1d(channels, residual_channels)
         self.res_stacks = ResidualStack(
@@ -153,13 +159,14 @@ class Wavenet(torch.nn.Module):
             residual_channels, 
             dilation_channels, 
             skip_channels, 
-            condition_channels
+            condition_channels, 
+            kernel_size
         )
         self.post = PostProcess(skip_channels, end_channels, out_channels)
         self.loss = torch.nn.CrossEntropyLoss()
 
-    def calc_receptive_field(self, layer_size, stack_size):
-        layers = [2 ** i for i in range(layer_size)] * stack_size
+    def calc_receptive_field(self, layer_size, stack_size, kernel_size):
+        layers = [2 ** i for i in range(layer_size)] * stack_size * (kernel_size - 1)
         return sum(layers)
 
     def calc_output_size(self, x):
@@ -178,7 +185,7 @@ class Wavenet(torch.nn.Module):
 
     def sample_forward(self, x, condition):
         output = self.embedding(x).transpose(1, 2)
-        output = self.causal(output)[:, :, 1:]
+        output = self.causal(output)[..., 1:]
         output = self.res_stacks.sample_forward(output, condition)
         output = self.post(output)
         return output

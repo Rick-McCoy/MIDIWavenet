@@ -62,6 +62,7 @@ class Trainer():
                 for epoch in pbar1:
                     if epoch and epoch % self.args.decay_accumulate == 0:
                         self.wavenet.accumulate *= 4
+                        tqdm.write('Increasing batch size: Accumulate = {}'.format(self.wavenet.accumulate))
                     with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True, initial=self.start_2) as pbar2:
                         for condition, target in pbar2:
                             current_loss = self.wavenet.train(
@@ -108,15 +109,16 @@ class Trainer():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--layer_size', type=int, default=11)
-    parser.add_argument('--stack_size', type=int, default=2)
+    parser.add_argument('--layer_size', type=int, default=8)
+    parser.add_argument('--stack_size', type=int, default=4)
     parser.add_argument('--channels', type=int, default=586)
     parser.add_argument('--residual_channels', type=int, default=128)
     parser.add_argument('--dilation_channels', type=int, default=128)
-    parser.add_argument('--skip_channels', type=int, default=128)
-    parser.add_argument('--end_channels', type=int, default=128)
+    parser.add_argument('--skip_channels', type=int, default=512)
+    parser.add_argument('--end_channels', type=int, default=512)
     parser.add_argument('--out_channels', type=int, default=586)
     parser.add_argument('--condition_channels', type=int, default=129)
+    parser.add_argument('--kernel_size', type=int, default=3)
     parser.add_argument('--num_epochs', type=int, default=10000)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--batch_size', type=int, default=1)

@@ -16,7 +16,7 @@ if platform.system() == 'Linux':
 import matplotlib.pyplot as plt
 import torch.utils.data as data
 
-INPUT_LENGTH = 8192
+INPUT_LENGTH = 4096
 with open('lmd_pathlist.txt', 'r') as f:
     pathlist = f.readlines()
 pathlist = [x.strip() for x in pathlist]
@@ -44,7 +44,7 @@ def midi_roll(path):
     current_time = 0
     for i in event_list:
         if current_time != i[0]:
-            time_list.append(min(i[0] - current_time, 200) + 385)
+            time_list.append(min(i[0] - current_time, 200) + 384)
             current_time = i[0]
         time_list.append(i[1])
         time_list.append(i[2])
@@ -127,7 +127,7 @@ class Dataset(data.Dataset):
                 path = self.pathlist[np.random.randint(0, len(self.pathlist))]
                 return midi_roll(path)
             except:
-                tqdm.write(path)
+                # tqdm.write(path)
                 continue
 
     def __len__(self):
@@ -196,9 +196,9 @@ def Test():
         len_list.append(length)
     len_list.sort()
     print(len_list)
-    plt.hist([leng[0] for leng in len_list])
-    plt.show()
-    plt.show()
+    # plt.hist([leng[0] for leng in len_list])
+    # plt.show()
+    # plt.show()
         # sort_list += sort_list_frag
         # time_list += time_list_frag
         # bins = np.logspace(np.log(min(sort_list_frag)), np.log(max(sort_list_frag)), num=100, base=np.e)
