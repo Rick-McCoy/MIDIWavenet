@@ -1,7 +1,6 @@
 import os
 import torch
 import itertools
-import torch.optim
 import numpy as np
 import pretty_midi as pm
 from tqdm.autonotebook import tqdm
@@ -82,7 +81,7 @@ class Wavenet:
             init = init.unsqueeze(dim=0)
         init = init[..., -self.receptive_field - 2:]
         self.net.module.fill_queues(init, condition)
-        output = init
+        output = init[..., -2:]
         for i in tqdm(range(10000), dynamic_ncols=True):
             cont = self.net.module.sample_forward(output[..., -2:], condition).argmax()
             output = torch.cat((output, cont.unsqueeze(dim=0).unsqueeze(dim=0)), dim=-1) # pylint: disable=E1101

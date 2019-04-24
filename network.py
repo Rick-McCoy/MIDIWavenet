@@ -37,7 +37,7 @@ class ResidualBlock(torch.nn.Module):
         self.conditional_gate_linear = torch.nn.Linear(condition_channels, dilation_channels)
         self.residual_conv = torch.nn.Conv1d(dilation_channels, residual_channels, 1)
         self.skip_conv = torch.nn.Conv1d(dilation_channels, skip_channels, 1)
-        self.queues = [queue.Queue(dilation * i) for i in range(1, dilation + 1)]
+        self.queues = [queue.Queue(dilation * i) for i in range(1, kernel_size)]
         self.skip_size = 1
 
     def forward(self, x, condition, sample=False):
@@ -105,7 +105,7 @@ class ResidualStack(torch.nn.Module):
             res_block.skip_size = 1
             for que in res_block.queues:
                 top = que.get()
-                que.put(x)
+                que.put(x[..., -1:])
                 x = torch.cat((top, x), dim=-1) # pylint: disable=E1101
             x, skip = res_block(x, condition, sample=True)
             res_sum += skip
@@ -114,10 +114,10 @@ class ResidualStack(torch.nn.Module):
     def fill_queues(self, x, condition):
         for res_block in self.res_blocks:
             res_block.skip_size = 1
-            for que, j in zip(res_block.queues, range(1, len(res_block.queues) + 2)):
+            for que, j in zip(res_block.queues, range(1, len(res_block.queues) + 1)):
                 with que.mutex:
                     que.queue.clear()
-                for i in range((-res_block.dilation - 1) * j, -1):
+                for i in range(-res_block.dilation * j - 1, -1):
                     que.put(x[:, :, i:i + 1])
             x, _ = res_block(x, condition)
 
