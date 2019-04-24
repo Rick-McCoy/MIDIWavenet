@@ -46,7 +46,7 @@ class Wavenet:
             if step % self.accumulate == self.accumulate - 1:
                 self.writer.add_scalar('Train/Loss', loss.item() * self.accumulate, step // self.accumulate)
             if step // self.accumulate % 20 == 19:
-                x = torch.zeros(1, self.channels, output.shape[2]).scatter_(1, target[:1, -output.shape[2]:].unsqueeze(dim=0), 1) #pylint: disable=E1101
+                x = torch.zeros(1, self.channels, output.shape[2]).scatter_(1, target[:1, -output.shape[2]:].unsqueeze(dim=0).detach().cpu(), 1) #pylint: disable=E1101
                 self.writer.add_image('Score/Real', x, step // self.accumulate)
                 self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step // self.accumulate)
         return loss
