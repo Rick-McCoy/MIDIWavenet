@@ -9,7 +9,7 @@ class CausalConv1d(torch.nn.Module):
         self.conv = torch.nn.Conv1d(in_channels, out_channels, 
                                     kernel_size=2, bias=False)
 
-    def forward(self, x, dummy=None):
+    def forward(self, x):
         output = torch.nn.functional.pad(x, (1, 0), 'constant')
         output = self.conv(output)
         return output
@@ -50,11 +50,9 @@ class ResidualBlock(torch.nn.Module):
         dilated_filter.tanh_()
         dilated_gate.sigmoid_()
         dilated = dilated_filter * dilated_gate
-
         output = self.residual_conv(dilated)
-        output += x[:, :, -output.shape[2]:]
-
-        skip = self.skip_conv(dilated)[:, :, -self.skip_size:]
+        output += x[..., -output.shape[2]:]
+        skip = self.skip_conv(dilated)[..., -self.skip_size:]
         return output, skip
 
 class ResidualStack(torch.nn.Module):
@@ -147,6 +145,7 @@ class Wavenet(torch.nn.Module):
         ):
         super(Wavenet, self).__init__()
         self.receptive_field = self.calc_receptive_field(layer_size, stack_size)
+        self.embedding = torch.nn.Embedding(channels, channels)
         self.causal = CausalConv1d(channels, residual_channels)
         self.res_stacks = ResidualStack(
             layer_size, 
@@ -164,24 +163,27 @@ class Wavenet(torch.nn.Module):
         return sum(layers)
 
     def calc_output_size(self, x):
-        output_size = x.size()[2] - self.receptive_field
+        output_size = x.size()[-1] - self.receptive_field
         return output_size
 
-    def forward(self, x, condition, target):
+    def forward(self, target, condition):
+        x = target[..., :-1]
         output_size = self.calc_output_size(x)
-        dummy = torch.zeros_like(condition, requires_grad=True) # pylint: disable=E1101
-        output = checkpoint(self.causal, x, dummy)
+        output = self.embedding(x).transpose(1, 2)
+        output = self.causal(output)
         output = self.res_stacks(output, condition, output_size)
         output = self.post(output)
-        loss = self.loss(output, target[:, -output.shape[2]:])
+        loss = self.loss(output, target[:, -output_size:])
         return output, loss
 
     def sample_forward(self, x, condition):
-        output = self.causal(x)[:, :, 1:]
+        output = self.embedding(x).transpose(1, 2)
+        output = self.causal(output)[:, :, 1:]
         output = self.res_stacks.sample_forward(output, condition)
         output = self.post(output)
         return output
 
     def fill_queues(self, x, condition):
+        x = self.embedding(x).transpose(1, 2)
         x = self.causal(x)
         self.res_stacks.fill_queues(x, condition)

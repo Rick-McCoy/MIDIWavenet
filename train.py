@@ -63,9 +63,8 @@ class Trainer():
                     if epoch and epoch % self.args.decay_accumulate == 0:
                         self.wavenet.accumulate *= 4
                     with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True, initial=self.start_2) as pbar2:
-                        for x, condition, target in pbar2:
+                        for condition, target in pbar2:
                             current_loss = self.wavenet.train(
-                                x.cuda(non_blocking=True), 
                                 condition.cuda(non_blocking=True), 
                                 target.cuda(non_blocking=True), 
                                 step=step, train=True
@@ -79,9 +78,8 @@ class Trainer():
                     with torch.no_grad():
                         test_loss = 0
                         with tqdm(self.test_data_loader, total=self.test_range, dynamic_ncols=True) as pbar3:
-                            for x, condition, target in pbar3:
+                            for condition, target in pbar3:
                                 current_loss = self.wavenet.train(
-                                    x.cuda(non_blocking=True), 
                                     condition.cuda(non_blocking=True), 
                                     target.cuda(non_blocking=True), 
                                     train=False
@@ -99,11 +97,11 @@ class Trainer():
 
     def sample(self, num, name='Sample_{}'.format(int(time.time()))):
         for _ in tqdm(range(num), dynamic_ncols=True):
-            x, condition, _ = self.train_data_loader.dataset.__getitem__(0)
+            target, condition = self.train_data_loader.dataset.__getitem__(0)
             image = self.wavenet.sample(
                 name, 
                 temperature=self.args.temperature, 
-                init=torch.Tensor(x).cuda(non_blocking=True), 
+                init=torch.Tensor(target).cuda(non_blocking=True), 
                 condition=torch.Tensor(condition).cuda(non_blocking=True)
             )
         return image
@@ -113,10 +111,10 @@ if __name__ == '__main__':
     parser.add_argument('--layer_size', type=int, default=11)
     parser.add_argument('--stack_size', type=int, default=2)
     parser.add_argument('--channels', type=int, default=586)
-    parser.add_argument('--residual_channels', type=int, default=256)
-    parser.add_argument('--dilation_channels', type=int, default=256)
-    parser.add_argument('--skip_channels', type=int, default=256)
-    parser.add_argument('--end_channels', type=int, default=256)
+    parser.add_argument('--residual_channels', type=int, default=128)
+    parser.add_argument('--dilation_channels', type=int, default=128)
+    parser.add_argument('--skip_channels', type=int, default=128)
+    parser.add_argument('--end_channels', type=int, default=128)
     parser.add_argument('--out_channels', type=int, default=586)
     parser.add_argument('--condition_channels', type=int, default=129)
     parser.add_argument('--num_epochs', type=int, default=10000)

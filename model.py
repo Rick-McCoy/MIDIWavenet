@@ -39,14 +39,15 @@ class Wavenet:
             self.net.cuda()
             self.net = torch.nn.DataParallel(self.net)
 
-    def train(self, x, condition, target, step=1, train=True):
-        output, loss = self.net(x[:, :, :-1], condition, target)
-        loss = loss.sum() / self.accumulate
+    def train(self, condition, target, step=1, train=True):
+        output, loss = self.net(target, condition)
+        loss = loss.sum() / self.accumulate / torch.cuda.device_count()
         if train:
             if step % self.accumulate == self.accumulate - 1:
                 self.writer.add_scalar('Train/Loss', loss.item() * self.accumulate, step // self.accumulate)
             if step // self.accumulate % 20 == 19:
-                self.writer.add_image('Score/Real', x[0, :, -output.shape[2]:].unsqueeze(dim=0), step // self.accumulate)
+                x = torch.zeros(1, self.channels, output.shape[2]).scatter_(1, target[:1, -output.shape[2]:].unsqueeze(dim=0), 1) #pylint: disable=E1101
+                self.writer.add_image('Score/Real', x, step // self.accumulate)
                 self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step // self.accumulate)
         return loss
 
@@ -78,21 +79,25 @@ class Wavenet:
             init = self.gen_init(condition)
         else:
             init = init.unsqueeze(dim=0)
-        init = init[:, :, -self.receptive_field - 2:]
+        init = init[..., -self.receptive_field - 2:]
         self.net.module.fill_queues(init, condition)
-        output = init[..., -2:]
+        output = init
         for i in tqdm(range(10000), dynamic_ncols=True):
-            cont = self.net.module.sample_forward(output[..., -2:], condition)
-            cont = torch.nn.functional.softmax(cont, dim=1)
-            output = torch.cat((output, cont), dim=-1) # pylint: disable=E1101
-            if i % 20 == 0 and cont.squeeze().detach().cpu().numpy().argmax() == cont.squeeze().shape[0] - 1:
+            cont = self.net.module.sample_forward(output[..., -2:], condition).argmax()
+            output = torch.cat((output, cont.unsqueeze(dim=0)), dim=-1) # pylint: disable=E1101
+            if i % 20 == 0 and cont.item() == self.channels - 1:
                 break
-        return output[..., 1:]
+        return output
 
     def save(self, step):
         if not os.path.exists('Checkpoints'):
             os.mkdir('Checkpoints')
-        state = {'model': self.net.state_dict(), 'step': step + 1, 'optimizer': self.optimizer.state_dict()}
+        state = {
+            'model': self.net.state_dict(), 
+            'step': step + 1, 
+            'optimizer': self.optimizer.state_dict(), 
+            'accumulate': self.accumulate
+        }
         torch.save(state, 'Checkpoints/{}.pkl'.format(step))
     
     def load(self, path):
@@ -100,4 +105,5 @@ class Wavenet:
         load = torch.load(path)
         self.net.load_state_dict(load['model'])
         self.optimizer.load_state_dict(load['optimizer'])
+        self.accumulate = load['accumulate']
         return load['step']

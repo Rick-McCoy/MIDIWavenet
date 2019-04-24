@@ -8,8 +8,11 @@ import torch
 import warnings
 import librosa.display
 import time
+import platform
+import random
 import matplotlib
-matplotlib.use('Agg')
+if platform.system() == 'Linux':
+    matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import torch.utils.data as data
 
@@ -50,19 +53,30 @@ def midi_roll(path):
     filler = length - time_list.shape[0]
     num = np.random.randint(0, length - INPUT_LENGTH + 1)
     time_list = time_list[num : num + INPUT_LENGTH]
-    data = np.zeros((586, INPUT_LENGTH), dtype=np.bool)
     target = np.zeros((INPUT_LENGTH, ), dtype=np.longlong)
-    data[time_list, np.arange(time_list.shape[0])] = 1
-    if filler:
-        data[-1, -filler:] = 1
-        target[-filler:] = 1
+    if filler > 0:
+        target[-filler:] = 585
         target[:-filler] = time_list
     else:
         target = time_list
-    return data.astype(np.float32), condition.astype(np.float32), target
+    return condition.astype(np.float32), target
+
+def test_function(path):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        song = pm.PrettyMIDI(str(path).replace('\\', '/'))
+    # note_list = []
+    # for inst in song.instruments:
+    #     note_list += inst.notes
+    # dur_list = [(note.end - note.start) * 1000 for note in note_list]
+    # sort_list = [(note.start * 1000, note.end * 1000) for note in note_list]
+    # sort_list.sort()
+    # time_list = list(np.diff(np.array([i[0] for i in sort_list])))
+    # return dur_list, time_list
+    return len(song.instruments), sum([inst.is_drum for inst in song.instruments])
 
 def clean(x):
-    return x[0].argmax(axis=0)
+    return x[0]
 
 def save_roll(x, step):
     data = np.zeros((586, x.shape[0]))
@@ -150,24 +164,55 @@ def Test():
     #song = midi_roll('Datasets/lmd_matched/A/X/L/TRAXLZU12903D05F94/1bddc5dbd78f2d242a02a9985bc6b400.mid')
     #midi = piano_rolls_to_midi(song)
     #midi.write('Samples/Never.mid')
-    time_list = []
-    for _ in tqdm(range(100)):
+    # time_list = []
+    # for _ in tqdm(range(100)):
+    #     while True:
+    #         try:
+    #             time_list_datum = midi_roll(pathlist[np.random.randint(0, len(pathlist))])
+    #             break
+    #         except:
+    #             continue
+    #     time_list += time_list_datum
+    # time_list.sort()
+    # time_list = time_list[:-len(time_list) // 100]
+    # print(min(time_list))
+    # print(max(time_list))
+    # bins = np.exp(np.arange(np.log(min(time_list)), np.log(max(time_list)), (np.log(max(time_list)) - np.log(min(time_list))) / 1000))
+    # plt.xscale('log', nonposx='clip')
+    # plt.hist(time_list, bins=bins, cumulative=True, histtype='step')
+    # plt.show()
+    # plt.close()
+    # time_list = []
+    # sort_list = []
+    len_list = []
+    for _ in tqdm(range(1000)):
         while True:
             try:
-                time_list_datum = midi_roll(pathlist[np.random.randint(0, len(pathlist))])
+                length = test_function(random.choice(pathlist))
+                # sort_list_frag, time_list_frag = test_function(random.choice(pathlist))
                 break
             except:
                 continue
-        time_list += time_list_datum
-    time_list.sort()
-    time_list = time_list[:-len(time_list) // 100]
-    print(min(time_list))
-    print(max(time_list))
-    bins = np.exp(np.arange(np.log(min(time_list)), np.log(max(time_list)), (np.log(max(time_list)) - np.log(min(time_list))) / 1000))
-    plt.xscale('log', nonposx='clip')
-    plt.hist(time_list, bins=bins, cumulative=True, histtype='step')
+        len_list.append(length)
+    len_list.sort()
+    print(len_list)
+    plt.hist([leng[0] for leng in len_list])
     plt.show()
-    plt.close()
+    plt.show()
+        # sort_list += sort_list_frag
+        # time_list += time_list_frag
+        # bins = np.logspace(np.log(min(sort_list_frag)), np.log(max(sort_list_frag)), num=100, base=np.e)
+        # plt.xscale('log', nonposx='clip')
+        # plt.hist(sort_list_frag, bins=bins, cumulative=True, histtype='step')
+        # plt.show()
+        # plt.close()
+        # time_list_frag = [time for time in time_list_frag if time != 0]
+        # bins = np.logspace(np.log(min(time_list_frag)), np.log(max(time_list_frag)), num=100, base=np.e)
+        # plt.xscale('log', nonposx='clip')
+        # plt.hist(time_list_frag, bins=bins, cumulative=True, histtype='step')
+        # plt.show()
+        # plt.close()
+    
 
 if __name__ == '__main__':
     Test()
