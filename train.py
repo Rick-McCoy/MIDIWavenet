@@ -97,12 +97,12 @@ class Trainer():
 
     def sample(self, num, name='Sample_{}'.format(int(time.time()))):
         for _ in tqdm(range(num), dynamic_ncols=True):
-            target, condition = self.train_data_loader.dataset.__getitem__(0)
+            condition, target = self.train_data_loader.dataset.__getitem__(0)
             image = self.wavenet.sample(
                 name, 
                 temperature=self.args.temperature, 
-                init=torch.Tensor(target).cuda(non_blocking=True), 
-                condition=torch.Tensor(condition).cuda(non_blocking=True)
+                init=torch.from_numpy(target).cuda(non_blocking=True), # pylint: disable=E1101
+                condition=torch.from_numpy(condition).cuda(non_blocking=True) # pylint: disable=E1101
             )
         return image
 

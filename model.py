@@ -84,7 +84,7 @@ class Wavenet:
         output = init
         for i in tqdm(range(10000), dynamic_ncols=True):
             cont = self.net.module.sample_forward(output[..., -2:], condition).argmax()
-            output = torch.cat((output, cont.unsqueeze(dim=0)), dim=-1) # pylint: disable=E1101
+            output = torch.cat((output, cont.unsqueeze(dim=0).unsqueeze(dim=0)), dim=-1) # pylint: disable=E1101
             if i % 20 == 0 and cont.item() == self.channels - 1:
                 break
         return output
