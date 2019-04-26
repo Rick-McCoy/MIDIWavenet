@@ -105,8 +105,10 @@ def piano_rolls_to_midi(x, fs=200):
                 instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
                                                                 start=start, end=current_time))
         elif i < 585:
-            time_incr = i - 385
+            time_incr = i - 384
             current_time += time_incr / fs
+        else:
+            break
     for i in range(129):
         if instruments[i].notes:
             midi.instruments.append(instruments[i])

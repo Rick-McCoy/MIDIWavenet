@@ -40,7 +40,7 @@ class ResidualBlock(torch.nn.Module):
         self.queues = [queue.Queue(dilation * i) for i in range(1, kernel_size)]
         self.skip_size = 1
 
-    def forward(self, x, condition, sample=False):
+    def forward(self, x, condition, res_sum, sample=False):
         dilated_filter = self.filter_conv(x, sample)
         dilated_gate = self.gate_conv(x, sample)
         conditional_filter = self.conditional_filter_linear(condition).unsqueeze(dim=-1)
@@ -52,8 +52,8 @@ class ResidualBlock(torch.nn.Module):
         dilated = dilated_filter * dilated_gate
         output = self.residual_conv(dilated)
         output += x[..., -output.shape[2]:]
-        skip = self.skip_conv(dilated)[..., -self.skip_size:]
-        return output, skip
+        res_sum = res_sum + self.skip_conv(dilated)[..., -self.skip_size:]
+        return output, res_sum
 
 class ResidualStack(torch.nn.Module):
     def __init__(
@@ -69,6 +69,7 @@ class ResidualStack(torch.nn.Module):
         super(ResidualStack, self).__init__()
         self.layer_size = layer_size
         self.stack_size = stack_size
+        self.skip_channels = skip_channels
         self.dilations = [2 ** i for i in range(self.layer_size)] * self.stack_size
         self.res_blocks = torch.nn.ModuleList(
             self.stack_res_blocks(
@@ -92,11 +93,10 @@ class ResidualStack(torch.nn.Module):
         return res_blocks
 
     def forward(self, x, condition, skip_size):
-        res_sum = 0
+        res_sum = torch.zeros((x.shape[0], self.skip_channels, skip_size), device=x.device) # pylint: disable=E1101
         for res_block in self.res_blocks:
             res_block.skip_size = skip_size
-            x, skip = checkpoint(res_block, x, condition)
-            res_sum += skip
+            x, res_sum = checkpoint(res_block, x, condition, res_sum)
         return res_sum
 
     def sample_forward(self, x, condition):
@@ -107,8 +107,7 @@ class ResidualStack(torch.nn.Module):
                 top = que.get()
                 que.put(x[..., -1:])
                 x = torch.cat((top, x), dim=-1) # pylint: disable=E1101
-            x, skip = res_block(x, condition, sample=True)
-            res_sum += skip
+            x, res_sum = res_block(x, condition, res_sum, sample=True)
         return res_sum
 
     def fill_queues(self, x, condition):
@@ -119,7 +118,7 @@ class ResidualStack(torch.nn.Module):
                     que.queue.clear()
                 for i in range(-res_block.dilation * j - 1, -1):
                     que.put(x[:, :, i:i + 1])
-            x, _ = res_block(x, condition)
+            x, _ = res_block(x, condition, 0)
 
 class PostProcess(torch.nn.Module):
     def __init__(self, skip_channels, end_channels, out_channels):
