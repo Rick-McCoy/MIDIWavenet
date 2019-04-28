@@ -9,7 +9,6 @@ import warnings
 import librosa.display
 import time
 import platform
-import random
 import matplotlib
 if platform.system() == 'Linux':
     matplotlib.use('Agg')
@@ -24,21 +23,21 @@ with open('pathlist.txt', 'r') as f:
     add_pathlist = f.readlines()
 pathlist += [x.strip() for x in add_pathlist]
 np.random.shuffle(pathlist)
-trainlist = pathlist[:-1024]
-testlist = pathlist[-1024:]
+train_list = pathlist[:-1024]
+test_list = pathlist[-1024:]
 
 def midi_roll(path):
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         song = pm.PrettyMIDI(str(path).replace('\\', '/'))
     event_list = []
-    condition = np.zeros((129), dtype=np.bool)
+    condition = np.zeros((129), dtype=np.float32)
     for inst in song.instruments:
         program = inst.program if not inst.is_drum else 128
         condition[program] = 1
         for note in inst.notes:
-            event_list.append((int(note.start * 200), program, note.pitch + 129))
-            event_list.append((int(note.end * 200), program, note.pitch + 257))
+            event_list.append((round(note.start * 200), program, note.pitch + 129))
+            event_list.append((round(note.end * 200), program, note.pitch + 257))
     event_list.sort()
     time_list = []
     current_time = 0
@@ -48,32 +47,10 @@ def midi_roll(path):
             current_time = i[0]
         time_list.append(i[1])
         time_list.append(i[2])
-    time_list = np.array(time_list, dtype=np.longlong)
-    length = max(INPUT_LENGTH, time_list.shape[0])
-    filler = length - time_list.shape[0]
-    num = np.random.randint(0, length - INPUT_LENGTH + 1)
-    time_list = time_list[num : num + INPUT_LENGTH]
-    target = np.zeros((INPUT_LENGTH, ), dtype=np.longlong)
-    if filler > 0:
-        target[-filler:] = 585
-        target[:-filler] = time_list
-    else:
-        target = time_list
-    return condition.astype(np.float32), target
-
-def test_function(path):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        song = pm.PrettyMIDI(str(path).replace('\\', '/'))
-    # note_list = []
-    # for inst in song.instruments:
-    #     note_list += inst.notes
-    # dur_list = [(note.end - note.start) * 1000 for note in note_list]
-    # sort_list = [(note.start * 1000, note.end * 1000) for note in note_list]
-    # sort_list.sort()
-    # time_list = list(np.diff(np.array([i[0] for i in sort_list])))
-    # return dur_list, time_list
-    return len(song.instruments), sum([inst.is_drum for inst in song.instruments])
+    time_list += [585] * (INPUT_LENGTH - len(time_list))
+    num = np.random.randint(0, len(time_list) - INPUT_LENGTH + 1)
+    target = np.array(time_list[num : num + INPUT_LENGTH], dtype=np.int64) # pylint: disable=invalid-slice-index
+    return condition, target
 
 def clean(x):
     return x[0]
@@ -109,33 +86,26 @@ def piano_rolls_to_midi(x, fs=200):
             current_time += time_incr / fs
         else:
             break
-    for i in range(129):
-        if instruments[i].notes:
-            midi.instruments.append(instruments[i])
+    for inst in instruments:
+        if inst.notes:
+            midi.instruments.append(inst)
     return midi
 
 class Dataset(data.Dataset):
     def __init__(self, train, length=None):
         super(Dataset, self).__init__()
-        if train:
-            self.pathlist = trainlist
-        else:
-            self.pathlist = testlist
+        self.pathlist = np.array(train_list if train else test_list)
         self.len = length
 
     def __getitem__(self, index):
         while True:
             try:
-                path = self.pathlist[np.random.randint(0, len(self.pathlist))]
-                return midi_roll(path)
+                return midi_roll(np.random.choice(self.pathlist))
             except:
-                # tqdm.write(path)
                 continue
 
     def __len__(self):
-        if self.len is None:
-            return len(self.pathlist)
-        return self.len
+        return self.pathlist.shape[0] if self.len is None else self.len
 
 def init_fn(worker_id):
     np.random.seed(torch.initial_seed() % (2 ** 32))
@@ -147,74 +117,3 @@ class DataLoader(data.DataLoader):
                                             num_workers=num_workers, \
                                             pin_memory=True, \
                                             worker_init_fn=init_fn)
-
-def Test():
-    # print(len(pathlist))
-    # len_list = []
-    # for _ in tqdm(range(200)):
-    #     while True:
-    #         try:
-    #             length = midi_roll(pathlist[np.random.randint(0, len(pathlist))])
-    #             break
-    #         except:
-    #             continue
-    #     len_list.append(length)
-    # len_list.sort()
-    # plt.hist(len_list[:-20], bins=100, cumulative=True, histtype='step')
-    # plt.show()
-    # plt.close()
-    _, song = midi_roll('Datasets/lmd_matched/A/X/L/TRAXLZU12903D05F94/1bddc5dbd78f2d242a02a9985bc6b400.mid')
-    midi = piano_rolls_to_midi(song)
-    midi.write('Samples/Never.mid')
-    # time_list = []
-    # for _ in tqdm(range(100)):
-    #     while True:
-    #         try:
-    #             time_list_datum = midi_roll(pathlist[np.random.randint(0, len(pathlist))])
-    #             break
-    #         except:
-    #             continue
-    #     time_list += time_list_datum
-    # time_list.sort()
-    # time_list = time_list[:-len(time_list) // 100]
-    # print(min(time_list))
-    # print(max(time_list))
-    # bins = np.exp(np.arange(np.log(min(time_list)), np.log(max(time_list)), (np.log(max(time_list)) - np.log(min(time_list))) / 1000))
-    # plt.xscale('log', nonposx='clip')
-    # plt.hist(time_list, bins=bins, cumulative=True, histtype='step')
-    # plt.show()
-    # plt.close()
-    # time_list = []
-    # sort_list = []
-    # len_list = []
-    # for _ in tqdm(range(1000)):
-    #     while True:
-    #         try:
-    #             length = test_function(random.choice(pathlist))
-    #             # sort_list_frag, time_list_frag = test_function(random.choice(pathlist))
-    #             break
-    #         except:
-    #             continue
-    #     len_list.append(length)
-    # len_list.sort()
-    # print(len_list)
-    # plt.hist([leng[0] for leng in len_list])
-    # plt.show()
-    # plt.show()
-        # sort_list += sort_list_frag
-        # time_list += time_list_frag
-        # bins = np.logspace(np.log(min(sort_list_frag)), np.log(max(sort_list_frag)), num=100, base=np.e)
-        # plt.xscale('log', nonposx='clip')
-        # plt.hist(sort_list_frag, bins=bins, cumulative=True, histtype='step')
-        # plt.show()
-        # plt.close()
-        # time_list_frag = [time for time in time_list_frag if time != 0]
-        # bins = np.logspace(np.log(min(time_list_frag)), np.log(max(time_list_frag)), num=100, base=np.e)
-        # plt.xscale('log', nonposx='clip')
-        # plt.hist(time_list_frag, bins=bins, cumulative=True, histtype='step')
-        # plt.show()
-        # plt.close()
-    
-
-if __name__ == '__main__':
-    Test()

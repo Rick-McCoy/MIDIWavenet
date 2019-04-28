@@ -12,21 +12,30 @@ tqdm
 numpy
 pretty-midi
 matplotlib
+tensorboard
+tensorboardX
+librosa
 ```
 
 ### Installing
 
-None necessary. Clone this repository.
+CUDA & cudnn is neccessary. Use whatever version that suits your libraries.
+
+Assumes training uses GPUs, will throw error if no CUDA-capable GPUs are present.
+
+Have tested on 1-GPU & 4-GPU environments.
 
 ### Datasets
 
-Training data are from two sources:
+Training data that I used are from two sources:
 
 [The Lakh MIDI Dataset v1.1](https://colinraffel.com/projects/lmd/): LMD_matched was used.
 
 [The Largest MIDI Collection on the Internet](https://www.reddit.com/r/WeAreTheMusicMakers/comments/3ajwe4/the_largest_midi_collection_on_the_internet/): A small subset was used.
 
-Extract datasets under /Datasets/Classics.
+Extract additional datasets under /Datasets.
+
+For fast preparation of filenames, all filenames are indexed in a text file under /Datasets. Add additional files if neccessary.
 
 ### Training
 
@@ -40,9 +49,9 @@ All hyperparameters are modifiable via flags. Please refer to train.py for speci
 
 ### Sampling
 
-Make sure your checkpoints are under /Checkpoints.
+Make sure your checkpoint is under /Checkpoints.
 
-The two checkpoints with the largest number in its name will be automatically selected.
+If multiple checkpoints are present, the checkpoint with the largest number in its name will be automatically selected.
 
 Then, run
 
@@ -50,11 +59,18 @@ Then, run
 python3 train.py --sample NUMBER_OF_SAMPLES
 ```
 
+Generated samples & piano roll image files will be under /Samples.
+
 ## TODOs
 
-Enable general generation of MIDI files: Currently only able to generate classical music.
+~~Enable general generation of MIDI files: Currently only able to generate classical music.~~
+    -> General generation is now possible: only need to expand dataset. Unfortunately, specifying genre is impossible.
 
-~~Add length flag for sampling: Currently fixed at 4096 time steps. (\~43 seconds)~~ Added length flag. Unit of length: 1/96 (s).
+~~Add length flag for sampling: Currently fixed at 4096 time steps. (\~43 seconds)~~
+    -> ~~Added length flag. Unit of length: 1/96 (s)~~.
+    -> Currently, MIDIWavenet decided when to end. Maxes out in 10000 time steps, or \~100 seconds.
+
+Improve quality of generated music.
 
 ## Authors
 

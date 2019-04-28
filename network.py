@@ -117,7 +117,7 @@ class ResidualStack(torch.nn.Module):
                 with que.mutex:
                     que.queue.clear()
                 for i in range(-res_block.dilation * j - 1, -1):
-                    que.put(x[:, :, i:i + 1])
+                    que.put(x[..., i:i + 1])
             x, _ = res_block(x, condition, 0)
 
 class PostProcess(torch.nn.Module):

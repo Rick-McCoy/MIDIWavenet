@@ -60,9 +60,9 @@ class Trainer():
             warnings.simplefilter('ignore')
             with tqdm(range(self.args.num_epochs), dynamic_ncols=True, initial=self.start_1) as pbar1:
                 for epoch in pbar1:
-                    if epoch and epoch % self.args.decay_accumulate == 0:
+                    if epoch and epoch == self.args.decay_accumulate:
                         self.wavenet.accumulate *= 4
-                        self.args.decay_accumulate *= 4
+                        self.args.decay_accumulate *= 5
                         tqdm.write('Increasing batch size: Accumulate = {}'.format(self.wavenet.accumulate))
                     with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True, initial=self.start_2) as pbar2:
                         for condition, target in pbar2:
@@ -78,7 +78,7 @@ class Trainer():
                             pbar2.set_postfix(loss=current_loss.item())
                             step += 1
                     with torch.no_grad():
-                        test_loss = 0
+                        test_loss = []
                         with tqdm(self.test_data_loader, total=self.test_range, dynamic_ncols=True) as pbar3:
                             for condition, target in pbar3:
                                 current_loss = self.wavenet.train(
@@ -86,9 +86,9 @@ class Trainer():
                                     target.cuda(non_blocking=True), 
                                     train=False
                                 ).sum().item()
-                                test_loss += current_loss
+                                test_loss.append(current_loss)
                                 pbar3.set_postfix(loss=current_loss)
-                        test_loss /= self.test_range
+                        test_loss = sum(test_loss) / len(test_loss)
                         pbar1.set_postfix(loss=test_loss)
                         sampled_image = self.sample(num=1, name=step)
                         self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
