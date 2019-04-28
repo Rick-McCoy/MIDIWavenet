@@ -75,7 +75,7 @@ class Trainer():
                             if step % self.args.accumulate == self.args.accumulate - 1:
                                 self.wavenet.optimizer.step()
                                 self.wavenet.optimizer.zero_grad()
-                            pbar2.set_postfix(loss=current_loss.item())
+                            pbar2.set_postfix(loss=current_loss.item() * self.wavenet.accumulate)
                             step += 1
                     with torch.no_grad():
                         test_loss = []
@@ -87,9 +87,9 @@ class Trainer():
                                     train=False
                                 ).sum().item()
                                 test_loss.append(current_loss)
-                                pbar3.set_postfix(loss=current_loss)
+                                pbar3.set_postfix(loss=current_loss * self.wavenet.accumulate)
                         test_loss = sum(test_loss) / len(test_loss)
-                        pbar1.set_postfix(loss=test_loss)
+                        pbar1.set_postfix(loss=test_loss * self.wavenet.accumulate)
                         sampled_image = self.sample(num=1, name=step)
                         self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
                         self.test_writer.add_image('Score/Sampled', sampled_image, step)
