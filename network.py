@@ -93,7 +93,7 @@ class ResidualStack(torch.nn.Module):
         return res_blocks
 
     def forward(self, x, condition, skip_size):
-        res_sum = torch.zeros((x.shape[0], self.skip_channels, skip_size), device=x.device) # pylint: disable=E1101
+        res_sum = torch.zeros((1, 1, 1), device=x.device) # pylint: disable=E1101
         for res_block in self.res_blocks:
             res_block.skip_size = skip_size
             x, res_sum = checkpoint(res_block, x, condition, res_sum)

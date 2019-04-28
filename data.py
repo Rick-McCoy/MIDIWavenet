@@ -163,9 +163,9 @@ def Test():
     # plt.hist(len_list[:-20], bins=100, cumulative=True, histtype='step')
     # plt.show()
     # plt.close()
-    #song = midi_roll('Datasets/lmd_matched/A/X/L/TRAXLZU12903D05F94/1bddc5dbd78f2d242a02a9985bc6b400.mid')
-    #midi = piano_rolls_to_midi(song)
-    #midi.write('Samples/Never.mid')
+    _, song = midi_roll('Datasets/lmd_matched/A/X/L/TRAXLZU12903D05F94/1bddc5dbd78f2d242a02a9985bc6b400.mid')
+    midi = piano_rolls_to_midi(song)
+    midi.write('Samples/Never.mid')
     # time_list = []
     # for _ in tqdm(range(100)):
     #     while True:
@@ -186,18 +186,18 @@ def Test():
     # plt.close()
     # time_list = []
     # sort_list = []
-    len_list = []
-    for _ in tqdm(range(1000)):
-        while True:
-            try:
-                length = test_function(random.choice(pathlist))
-                # sort_list_frag, time_list_frag = test_function(random.choice(pathlist))
-                break
-            except:
-                continue
-        len_list.append(length)
-    len_list.sort()
-    print(len_list)
+    # len_list = []
+    # for _ in tqdm(range(1000)):
+    #     while True:
+    #         try:
+    #             length = test_function(random.choice(pathlist))
+    #             # sort_list_frag, time_list_frag = test_function(random.choice(pathlist))
+    #             break
+    #         except:
+    #             continue
+    #     len_list.append(length)
+    # len_list.sort()
+    # print(len_list)
     # plt.hist([leng[0] for leng in len_list])
     # plt.show()
     # plt.show()

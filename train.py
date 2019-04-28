@@ -62,6 +62,7 @@ class Trainer():
                 for epoch in pbar1:
                     if epoch and epoch % self.args.decay_accumulate == 0:
                         self.wavenet.accumulate *= 4
+                        self.args.decay_accumulate *= 4
                         tqdm.write('Increasing batch size: Accumulate = {}'.format(self.wavenet.accumulate))
                     with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True, initial=self.start_2) as pbar2:
                         for condition, target in pbar2:
