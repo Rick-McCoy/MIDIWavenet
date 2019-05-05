@@ -13,18 +13,17 @@ class Wavenet:
             args.layer_size, 
             args.stack_size, 
             args.channels, 
+            args.embedding_channels, 
             args.residual_channels, 
             args.dilation_channels, 
             args.skip_channels, 
             args.end_channels, 
-            args.out_channels, 
             args.condition_channels, 
             args.kernel_size
         )
         self.receptive_field = self.net.receptive_field
         self._prepare_for_gpu()
         self.channels = args.channels
-        self.out_channels = args.out_channels
         self.learning_rate = args.learning_rate
         self.optimizer = self._optimizer()
         self.optimizer.zero_grad()

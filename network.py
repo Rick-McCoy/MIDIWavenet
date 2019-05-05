@@ -121,10 +121,10 @@ class ResidualStack(torch.nn.Module):
             x, _ = res_block(x, condition, 0)
 
 class PostProcess(torch.nn.Module):
-    def __init__(self, skip_channels, end_channels, out_channels):
+    def __init__(self, skip_channels, end_channels, channels):
         super(PostProcess, self).__init__()
         self.conv1 = torch.nn.Conv1d(skip_channels, end_channels, 1)
-        self.conv2 = torch.nn.Conv1d(end_channels, out_channels, 1)
+        self.conv2 = torch.nn.Conv1d(end_channels, channels, 1)
         self.relu = torch.nn.ReLU(inplace=True)
 
     def forward(self, x):
@@ -140,18 +140,18 @@ class Wavenet(torch.nn.Module):
             layer_size, 
             stack_size, 
             channels, 
+            embedding_channels, 
             residual_channels, 
             dilation_channels, 
             skip_channels, 
             end_channels, 
-            out_channels, 
             condition_channels, 
             kernel_size
         ):
         super(Wavenet, self).__init__()
         self.receptive_field = self.calc_receptive_field(layer_size, stack_size, kernel_size)
-        self.embedding = torch.nn.Embedding(channels, channels)
-        self.causal = CausalConv1d(channels, residual_channels)
+        self.embedding = torch.nn.Embedding(channels, embedding_channels)
+        self.causal = CausalConv1d(embedding_channels, residual_channels)
         self.res_stacks = ResidualStack(
             layer_size, 
             stack_size, 
@@ -161,7 +161,7 @@ class Wavenet(torch.nn.Module):
             condition_channels, 
             kernel_size
         )
-        self.post = PostProcess(skip_channels, end_channels, out_channels)
+        self.post = PostProcess(skip_channels, end_channels, channels)
         self.loss = torch.nn.CrossEntropyLoss()
 
     def calc_receptive_field(self, layer_size, stack_size, kernel_size):
