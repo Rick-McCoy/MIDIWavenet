@@ -90,7 +90,7 @@ class Trainer():
                         test_loss = sum(test_loss) / len(test_loss)
                         pbar1.set_postfix(loss=test_loss * self.wavenet.accumulate)
                         sampled_image = self.sample(num=1, name=step)
-                        self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
+                        self.test_writer.add_scalar('Test/Testing loss', test_loss * self.wavenet.accumulate, step)
                         self.test_writer.add_image('Score/Sampled', sampled_image, step)
                         self.wavenet.save(step)
         self.test_writer.close()
