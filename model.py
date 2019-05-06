@@ -29,6 +29,7 @@ class Wavenet:
         self.optimizer.zero_grad()
         self.writer = writer
         self.accumulate = args.accumulate
+        self.loss_sum = 0
 
     def _optimizer(self):
         return torch.optim.Adam(self.net.parameters(), lr=self.learning_rate)
@@ -41,10 +42,12 @@ class Wavenet:
     def train(self, condition, target, step=1, train=True):
         output, loss = self.net(target, condition)
         loss = loss.sum() / self.accumulate / torch.cuda.device_count()
+        self.loss_sum += loss.item()
         if train:
-            if step:
-                self.writer.add_scalar('Train/Loss', loss.item() * self.accumulate, step)
-            if step % 100 == 99:
+            if step % self.accumulate == self.accumulate - 1:
+                self.writer.add_scalar('Train/Loss', self.loss_sum, step)
+                self.loss_sum = 0
+            if step % 500 == 499:
                 x = torch.zeros(1, self.channels, output.shape[2]).scatter_(1, target[:1, -output.shape[2]:].unsqueeze(dim=0).detach().cpu(), 1) #pylint: disable=E1101
                 self.writer.add_image('Score/Real', x, step)
                 self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step)
