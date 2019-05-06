@@ -59,7 +59,7 @@ class Wavenet:
         midi = piano_rolls_to_midi(roll)
         midi.write('Samples/{}.mid'.format(step))
         tqdm.write('Saved to Samples/{}.mid'.format(step))
-        sampled_image = np.zeros((1, 586, roll.shape[0]))
+        sampled_image = np.zeros((1, 587, roll.shape[0]))
         sampled_image[0, roll, np.arange(roll.shape[0])] = 1
         return sampled_image
 

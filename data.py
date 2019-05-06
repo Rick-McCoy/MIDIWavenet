@@ -36,27 +36,37 @@ def midi_roll(path):
         program = inst.program if not inst.is_drum else 128
         condition[program] = 1
         for note in inst.notes:
-            event_list.append((round(note.start * 200), program, note.pitch + 129))
-            event_list.append((round(note.end * 200), program, note.pitch + 257))
+            event_list.append((round(note.start * 1000), program * 256 + note.pitch))
+            event_list.append((round(note.end * 1000), program * 256 + note.pitch + 128))
     event_list.sort()
-    time_list = []
+    time_list = [34024]
     current_time = 0
     for i in event_list:
         if current_time != i[0]:
-            time_list.append(min(i[0] - current_time, 200) + 384)
+            time_list.append(min(i[0] - current_time, 1000) + 33023)
             current_time = i[0]
         time_list.append(i[1])
-        time_list.append(i[2])
-    time_list += [585] * (INPUT_LENGTH - len(time_list))
+    time_list.append(34025)
+    time_list += [34025] * (INPUT_LENGTH - len(time_list))
     num = np.random.randint(0, len(time_list) - INPUT_LENGTH + 1)
     target = np.array(time_list[num : num + INPUT_LENGTH], dtype=np.int64) # pylint: disable=invalid-slice-index
     return condition, target
 
 def clean(x):
-    return x[0]
+    x = x[0]
+    time_list = []
+    for i in x:
+        if i < 33024:
+            time_list.append(i // 256)
+            time_list.append(i % 256 + 129)
+        elif i < 34024:
+            time_list.append(i - 33023)
+        else:
+            time_list.append(i - 34024 + 585)
+    return np.array(time_list)
 
 def save_roll(x, step):
-    data = np.zeros((586, x.shape[0]))
+    data = np.zeros((587, x.shape[0]))
     data[x, np.arange(x.shape[0])] = 1
     fig = plt.figure(figsize=(72, 24))
     librosa.display.specshow(data, x_axis='time', hop_length=1, sr=96, fmin=pm.note_number_to_hz(12))
@@ -64,7 +74,7 @@ def save_roll(x, step):
     fig.savefig('Samples/{}.png'.format(step))
     plt.close(fig)
 
-def piano_rolls_to_midi(x, fs=200):
+def piano_rolls_to_midi(x, fs=1000):
     midi = pm.PrettyMIDI()
     instruments = [pm.Instrument(i) for i in range(128)] + [pm.Instrument(0, is_drum=True)]
     current_inst = current_pitch = current_time = 0

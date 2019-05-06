@@ -111,7 +111,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--layer_size', type=int, default=8)
     parser.add_argument('--stack_size', type=int, default=4)
-    parser.add_argument('--channels', type=int, default=586)
+    parser.add_argument('--channels', type=int, default=34026)
     parser.add_argument('--embedding_channels', type=int, default=512)
     parser.add_argument('--residual_channels', type=int, default=128)
     parser.add_argument('--dilation_channels', type=int, default=128)
