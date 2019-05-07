@@ -42,8 +42,8 @@ class Wavenet:
     def train(self, condition, target, step=1, train=True):
         output, loss = self.net(target, condition)
         loss = loss.sum() / self.accumulate / torch.cuda.device_count()
-        self.loss_sum += loss.item()
         if train:
+            self.loss_sum += loss.item()
             if step % self.accumulate == self.accumulate - 1:
                 self.writer.add_scalar('Train/Loss', self.loss_sum, step)
                 self.loss_sum = 0
