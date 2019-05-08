@@ -48,9 +48,14 @@ class Wavenet:
                 self.writer.add_scalar('Train/Loss', self.loss_sum, step)
                 self.loss_sum = 0
             if step % 500 == 499:
-                x = torch.zeros(1, self.channels, output.shape[2]).scatter_(1, target[:1, -output.shape[2]:].unsqueeze(dim=0).detach().cpu(), 1) #pylint: disable=E1101
-                self.writer.add_image('Score/Real', x, step)
-                self.writer.add_image('Score/Generated', torch.nn.functional.softmax(output[0].unsqueeze(dim=0), dim=1), step)
+                x = clean(target[:1, -output.shape[2]:].detach().cpu().numpy())
+                image = np.zeros((1, 1387, x.shape[0]))
+                image[0, x, np.arange(x.shape[0])] = 1
+                self.writer.add_image('Score/Real', image, step)
+                x = clean(output.argmax(dim=1).detach().cpu().numpy())
+                image = np.zeros((1, 1387, x.shape[0]))
+                image[0, x, np.arange(x.shape[0])] = 1
+                self.writer.add_image('Score/Generated', image, step)
         return loss
 
     def sample(self, step, temperature=1., init=None, condition=None):
@@ -62,7 +67,7 @@ class Wavenet:
         midi = piano_rolls_to_midi(roll)
         midi.write('Samples/{}.mid'.format(step))
         tqdm.write('Saved to Samples/{}.mid'.format(step))
-        sampled_image = np.zeros((1, 587, roll.shape[0]))
+        sampled_image = np.zeros((1, 1387, roll.shape[0]))
         sampled_image[0, roll, np.arange(roll.shape[0])] = 1
         return sampled_image
 

@@ -6,7 +6,6 @@ import pretty_midi as pm
 import numpy as np
 import torch
 import warnings
-import librosa.display
 import time
 import platform
 import matplotlib
@@ -60,16 +59,15 @@ def clean(x):
             time_list.append(i // 256)
             time_list.append(i % 256 + 129)
         elif i < 34024:
-            time_list.append(i - 33023)
+            time_list.append(i - 33024 + 385)
         else:
-            time_list.append(i - 34024 + 585)
+            time_list.append(i - 34024 + 1385)
     return np.array(time_list)
 
 def save_roll(x, step):
-    data = np.zeros((587, x.shape[0]))
+    data = np.zeros((1387, x.shape[0]))
     data[x, np.arange(x.shape[0])] = 1
     fig = plt.figure(figsize=(72, 24))
-    librosa.display.specshow(data, x_axis='time', hop_length=1, sr=96, fmin=pm.note_number_to_hz(12))
     plt.title('{}'.format(step))
     fig.savefig('Samples/{}.png'.format(step))
     plt.close(fig)
@@ -91,10 +89,10 @@ def piano_rolls_to_midi(x, fs=1000):
                 start = start_time[current_inst][current_pitch].get()
                 instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
                                                                 start=start, end=current_time))
-        elif i < 585:
+        elif i < 1385:
             time_incr = i - 384
             current_time += time_incr / fs
-        else:
+        elif i == 1386:
             break
     for inst in instruments:
         if inst.notes:
