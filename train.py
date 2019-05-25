@@ -10,7 +10,7 @@ import warnings
 from tqdm.autonotebook import tqdm
 from model import Wavenet
 from data import DataLoader
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 def natural_sort_key(s, _nsre=re.compile('(\\d+)')):
     return [int(text) if text.isdigit() else text.lower() for text in _nsre.split(s)]
