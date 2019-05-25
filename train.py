@@ -102,8 +102,8 @@ class Trainer():
             image = self.wavenet.sample(
                 name, 
                 temperature=self.args.temperature, 
-                init=torch.from_numpy(target).cuda(non_blocking=True), # pylint: disable=E1101
-                condition=torch.from_numpy(condition).cuda(non_blocking=True) # pylint: disable=E1101
+                init=torch.from_numpy(target).cuda(non_blocking=True), # pylint: disable=no-member
+                condition=torch.from_numpy(condition).cuda(non_blocking=True) # pylint: disable=no-member
             )
         return image
 

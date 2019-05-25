@@ -71,29 +71,14 @@ class Wavenet:
         sampled_image[0, roll, np.arange(roll.shape[0])] = 1
         return sampled_image
 
-    def gen_init(self, condition=None):
-        channels = [0, 72, 120, 192, 240, 288, 324]
-        output = torch.zeros([1, self.channels, self.large_receptive_field + 2]).cuda() # pylint: disable=E1101
-        output[:, 324] = 1
-        if condition is None:
-            condition = torch.randint(2, size=(7,)).cuda() # pylint: disable=E1101
-        for i, j in enumerate(condition):
-            if j:
-                for _ in range(np.random.randint(0, 4)):
-                    output[:, np.random.randint(channels[i], channels[i + 1]), -1] = 1
-        return output, condition
-
     def generate(self, temperature=1., init=None, condition=None):
-        if init is None:
-            init = self.gen_init(condition)
-        else:
-            init = init.unsqueeze(dim=0)
-        init = init[..., -self.receptive_field - 2:]
+        init = init.unsqueeze(dim=0)[..., -self.receptive_field - 2:]
         self.net.module.fill_queues(init, condition)
         output = init[..., -2:]
         for i in tqdm(range(10000), dynamic_ncols=True):
-            cont = self.net.module.sample_forward(output[..., -2:], condition).argmax()
-            output = torch.cat((output, cont.unsqueeze(dim=0).unsqueeze(dim=0)), dim=-1) # pylint: disable=E1101
+            cont = self.net.module.sample_forward(output[..., -2:], condition)
+            cont = torch.multinomial(cont.squeeze().softmax(dim=0), num_samples=1) # pylint: disable=no-member
+            output = torch.cat((output, cont.unsqueeze(dim=0)), dim=-1) # pylint: disable=no-member
             if i % 20 == 0 and cont.item() == self.channels - 1:
                 break
         return output
@@ -115,4 +100,4 @@ class Wavenet:
         self.net.load_state_dict(load['model'])
         self.optimizer.load_state_dict(load['optimizer'])
         self.accumulate = load['accumulate']
-        return load['step']
+        return load['step'] - 1

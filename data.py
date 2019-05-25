@@ -35,11 +35,18 @@ def midi_roll(path):
         program = inst.program if not inst.is_drum else 128
         condition[program] = 1
         for note in inst.notes:
-            event_list.append((round(note.start * 1000), program * 256 + note.pitch))
-            event_list.append((round(note.end * 1000), program * 256 + note.pitch + 128))
+            event_list.append((note.start * 1000, program * 256 + note.pitch))
+            event_list.append((note.end * 1000, program * 256 + note.pitch + 128))
+    event_list.sort()
+    diff = np.diff(event_list, axis=0)[:, 0]
+    diff = diff[np.nonzero(diff)]
+    diff_max = np.log(1000 / np.amax(diff))
+    diff_min = -np.log(np.amin(diff)) # pylint: disable=invalid-unary-operand-type
+    ratio = 1 if diff_max < diff_min else np.exp(np.random.random() * (diff_max - diff_min) + diff_min)
+    event_list = [(round(i[0] * ratio), i[1]) for i in event_list]
     event_list.sort()
     time_list = [34024]
-    current_time = 0
+    current_time = event_list[0][0]
     for i in event_list:
         if current_time != i[0]:
             time_list.append(min(i[0] - current_time, 1000) + 33023)
@@ -67,8 +74,9 @@ def clean(x):
 def save_roll(x, step):
     data = np.zeros((1387, x.shape[0]))
     data[x, np.arange(x.shape[0])] = 1
-    fig = plt.figure(figsize=(72, 24))
+    fig = plt.figure(figsize=(72, 24), dpi=1000)
     plt.title('{}'.format(step))
+    plt.imshow(data, origin='lower')
     fig.savefig('Samples/{}.png'.format(step))
     plt.close(fig)
 
