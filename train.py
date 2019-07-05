@@ -34,8 +34,7 @@ class Trainer():
             args.num_workers, 
             False
         )
-        self.train_range = self.train_data_loader.__len__()
-        self.test_range = self.test_data_loader.__len__()
+        self.train_range = len(self.train_data_loader)
         self.start = 0
         self.start_1 = 0
         self.start_2 = 0
@@ -51,8 +50,8 @@ class Trainer():
                 checkpoint_list.sort(key=natural_sort_key)
                 start = self.wavenet.load(str(checkpoint_list[-1]))
                 self.start = start
-                self.start_1 = start // self.train_data_loader.__len__()
-                self.start_2 = start % self.train_data_loader.__len__()
+                self.start_1 = start // self.train_range
+                self.start_2 = start % self.train_range
 
     def run(self):
         step = self.start
@@ -60,37 +59,34 @@ class Trainer():
             warnings.simplefilter('ignore')
             with tqdm(range(self.args.num_epochs), dynamic_ncols=True, initial=self.start_1) as pbar1:
                 for epoch in pbar1:
-                    if epoch and epoch % self.args.decay_accumulate == 0:
+                    if self.args.decay_accumulate > 0 and epoch and epoch % self.args.decay_accumulate == 0:
                         self.wavenet.accumulate *= 4
+                        self.train_data_loader.dataset.length *= 4
                         tqdm.write('Increasing batch size: Accumulate = {}'.format(self.wavenet.accumulate))
-                    with tqdm(self.train_data_loader, total=self.train_range, dynamic_ncols=True, initial=self.start_2) as pbar2:
+                    with tqdm(self.train_data_loader, dynamic_ncols=True, initial=self.start_2) as pbar2:
                         for condition, target in pbar2:
                             current_loss = self.wavenet.train(
                                 condition.cuda(non_blocking=True), 
                                 target.cuda(non_blocking=True), 
                                 step=step, train=True
-                            ).sum()
-                            current_loss.backward()
-                            if step % self.args.accumulate == self.args.accumulate - 1:
-                                self.wavenet.optimizer.step()
-                                self.wavenet.optimizer.zero_grad()
-                            pbar2.set_postfix(loss=current_loss.item() * self.wavenet.accumulate)
+                            )
+                            pbar2.set_postfix(loss=current_loss)
                             step += 1
                     with torch.no_grad():
                         test_loss = []
-                        with tqdm(self.test_data_loader, total=self.test_range, dynamic_ncols=True) as pbar3:
+                        with tqdm(self.test_data_loader, dynamic_ncols=True) as pbar3:
                             for condition, target in pbar3:
                                 current_loss = self.wavenet.train(
                                     condition.cuda(non_blocking=True), 
                                     target.cuda(non_blocking=True), 
                                     train=False
-                                ).sum().item()
+                                )
                                 test_loss.append(current_loss)
-                                pbar3.set_postfix(loss=current_loss * self.wavenet.accumulate)
+                                pbar3.set_postfix(loss=current_loss)
                         test_loss = sum(test_loss) / len(test_loss)
-                        pbar1.set_postfix(loss=test_loss * self.wavenet.accumulate)
+                        pbar1.set_postfix(loss=test_loss)
                         sampled_image = self.sample(num=1, name=step)
-                        self.test_writer.add_scalar('Test/Testing loss', test_loss * self.wavenet.accumulate, step)
+                        self.test_writer.add_scalar('Test/Testing loss', test_loss, step)
                         self.test_writer.add_image('Score/Sampled', sampled_image, step)
                         self.wavenet.save(step)
         self.test_writer.close()
@@ -101,9 +97,9 @@ class Trainer():
             condition, target = self.train_data_loader.dataset.__getitem__(0)
             image = self.wavenet.sample(
                 name, 
-                temperature=self.args.temperature, 
                 init=torch.from_numpy(target).cuda(non_blocking=True), # pylint: disable=no-member
-                condition=torch.from_numpy(condition).cuda(non_blocking=True) # pylint: disable=no-member
+                condition=torch.from_numpy(condition).cuda(non_blocking=True),  # pylint: disable=no-member
+                temperature=self.args.temperature
             )
         return image
 
@@ -128,7 +124,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume', type=int, default=0)
     parser.add_argument('--temperature', type=float, default=1.)
     parser.add_argument('--accumulate', type=int, default=1)
-    parser.add_argument('--decay_accumulate', type=int, default=50)
+    parser.add_argument('--decay_accumulate', type=int, default=0)
     parser.add_argument('--sample_step', type=int, default=1000)
 
     args = parser.parse_args()

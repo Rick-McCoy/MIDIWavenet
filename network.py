@@ -37,7 +37,7 @@ class ResidualBlock(torch.nn.Module):
         self.conditional_gate_linear = torch.nn.Linear(condition_channels, dilation_channels)
         self.residual_conv = torch.nn.Conv1d(dilation_channels, residual_channels, 1)
         self.skip_conv = torch.nn.Conv1d(dilation_channels, skip_channels, 1)
-        self.queues = [queue.Queue(dilation * i) for i in range(1, kernel_size)]
+        self.queues = [queue.Queue(dilation + 1) for _ in range(kernel_size - 1)]
         self.skip_size = 1
 
     def forward(self, x, condition, res_sum, sample=False):
@@ -71,26 +71,16 @@ class ResidualStack(torch.nn.Module):
         self.stack_size = stack_size
         self.skip_channels = skip_channels
         self.dilations = [2 ** i for i in range(self.layer_size)] * self.stack_size
-        self.res_blocks = torch.nn.ModuleList(
-            self.stack_res_blocks(
+        self.res_blocks = torch.nn.ModuleList([
+            ResidualBlock(
                 residual_channels, 
                 dilation_channels, 
                 skip_channels, 
                 condition_channels, 
-                kernel_size
-            )
-        )
-
-    def stack_res_blocks(self, residual_channels, dilation_channels, skip_channels, condition_channels, kernel_size):
-        res_blocks = [ResidualBlock(
-            residual_channels, 
-            dilation_channels, 
-            skip_channels, 
-            condition_channels, 
-            kernel_size, 
-            dilation
-        ) for dilation in self.dilations]
-        return res_blocks
+                kernel_size, 
+                dilation
+            ) for dilation in self.dilations
+        ])
 
     def forward(self, x, condition, skip_size):
         res_sum = torch.zeros((1, 1, 1), device=x.device) # pylint: disable=no-member
@@ -103,9 +93,10 @@ class ResidualStack(torch.nn.Module):
         res_sum = 0
         for res_block in self.res_blocks:
             res_block.skip_size = 1
+            top = x[..., -1:]
             for que in res_block.queues:
+                que.put(top)
                 top = que.get()
-                que.put(x[..., -1:])
                 x = torch.cat((top, x), dim=-1) # pylint: disable=no-member
             x, res_sum = res_block(x, condition, res_sum, sample=True)
         return res_sum
@@ -113,11 +104,11 @@ class ResidualStack(torch.nn.Module):
     def fill_queues(self, x, condition):
         for res_block in self.res_blocks:
             res_block.skip_size = 1
-            for que, j in zip(res_block.queues, range(1, len(res_block.queues) + 1)):
+            for i, que in enumerate(res_block.queues):
                 with que.mutex:
                     que.queue.clear()
-                for i in range(-res_block.dilation * j - 1, -1):
-                    que.put(x[..., i:i + 1])
+                for j in range(res_block.dilation):
+                    que.put(x[..., -res_block.dilation * (i + 1) + j - 1].unsqueeze(dim=-1))
             x, _ = res_block(x, condition, 0)
 
 class PostProcess(torch.nn.Module):
@@ -130,7 +121,7 @@ class PostProcess(torch.nn.Module):
     def forward(self, x):
         output = self.relu(x)
         output = self.conv1(output)
-        self.relu(output)
+        output = self.relu(output)
         output = self.conv2(output)
         return output
 
@@ -149,7 +140,7 @@ class Wavenet(torch.nn.Module):
             kernel_size
         ):
         super(Wavenet, self).__init__()
-        self.receptive_field = self.calc_receptive_field(layer_size, stack_size, kernel_size)
+        self.receptive_field =  (2 ** layer_size - 1) * stack_size * (kernel_size - 1)
         self.embedding = torch.nn.Embedding(channels, embedding_channels)
         self.causal = CausalConv1d(embedding_channels, residual_channels)
         self.res_stacks = ResidualStack(
@@ -163,26 +154,22 @@ class Wavenet(torch.nn.Module):
         )
         self.post = PostProcess(skip_channels, end_channels, channels)
         self.loss = torch.nn.CrossEntropyLoss()
-
-    def calc_receptive_field(self, layer_size, stack_size, kernel_size):
-        layers = [2 ** i for i in range(layer_size)] * stack_size * (kernel_size - 1)
-        return sum(layers)
-
-    def calc_output_size(self, x):
-        output_size = x.size()[-1] - self.receptive_field
-        return output_size
-
-    def forward(self, target, condition):
+    
+    def get_output(self, target, condition):
         x = target[..., :-1]
-        output_size = self.calc_output_size(x)
+        output_size = x.shape[-1] - self.receptive_field
         output = self.embedding(x).transpose(1, 2)
         output = self.causal(output)
         output = self.res_stacks(output, condition, output_size)
         output = self.post(output)
-        loss = self.loss(output, target[:, -output_size:])
-        return output, loss
+        return output
 
-    def sample_forward(self, x, condition):
+    def forward(self, target, condition):
+        output = self.get_output(target, condition)
+        loss = self.loss(output, target[:, -output.shape[-1]:])
+        return loss
+
+    def sample_output(self, x, condition):
         output = self.embedding(x).transpose(1, 2)
         output = self.causal(output)[..., 1:]
         output = self.res_stacks.sample_forward(output, condition)

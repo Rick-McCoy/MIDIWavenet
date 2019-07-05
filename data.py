@@ -39,17 +39,15 @@ def midi_roll(path):
             event_list.append((note.end * 1000, program * 256 + note.pitch + 128))
     event_list.sort()
     diff = np.diff(event_list, axis=0)[:, 0]
-    diff = diff[np.nonzero(diff)]
-    diff_max = np.log(1000 / np.amax(diff))
-    diff_min = -np.log(np.amin(diff)) # pylint: disable=invalid-unary-operand-type
-    ratio = 1 if diff_max < diff_min else np.exp(np.random.random() * (diff_max - diff_min) + diff_min)
-    event_list = [(round(i[0] * ratio), i[1]) for i in event_list]
-    event_list.sort()
+    diff = np.log10(diff[np.nonzero(diff)])
+    diff_max = 4 - np.amax(diff)
+    diff_min = -np.amin(diff)
+    ratio = np.random.random() * max(diff_max + diff_min, 0) - diff_min
     time_list = [34024]
     current_time = event_list[0][0]
     for i in event_list:
-        if current_time != i[0]:
-            time_list.append(min(i[0] - current_time, 1000) + 33023)
+        if i[0] > current_time:
+            time_list.append(min(round((np.log10(i[0] - current_time) + ratio) * 250), 999) + 33024)
             current_time = i[0]
         time_list.append(i[1])
     time_list.append(34025)
@@ -74,10 +72,10 @@ def clean(x):
 def save_roll(x, step):
     data = np.zeros((1387, x.shape[0]))
     data[x, np.arange(x.shape[0])] = 1
-    fig = plt.figure(figsize=(72, 24), dpi=1000)
+    fig = plt.figure(figsize=(72, 24))
     plt.title('{}'.format(step))
     plt.imshow(data, origin='lower')
-    fig.savefig('Samples/{}.png'.format(step))
+    fig.savefig('Samples/{}.png'.format(step), bbox_inches='tight', dpi=400)
     plt.close(fig)
 
 def piano_rolls_to_midi(x, fs=1000):
@@ -95,11 +93,12 @@ def piano_rolls_to_midi(x, fs=1000):
             current_pitch = i - 257
             if not start_time[current_inst][current_pitch].empty():
                 start = start_time[current_inst][current_pitch].get()
-                instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
-                                                                start=start, end=current_time))
+                if current_time != start:
+                    instruments[current_inst].notes.append(pm.Note(velocity=100, pitch=current_pitch, \
+                                                                    start=start, end=current_time))
         elif i < 1385:
-            time_incr = i - 384
-            current_time += time_incr / fs
+            time_incr = i - 385
+            current_time += np.power(10, time_incr / 250)
         elif i == 1386:
             break
     for inst in instruments:
@@ -111,7 +110,7 @@ class Dataset(data.Dataset):
     def __init__(self, train, length=None):
         super(Dataset, self).__init__()
         self.pathlist = np.array(train_list if train else test_list)
-        self.len = length
+        self.length = length
 
     def __getitem__(self, index):
         while True:
@@ -121,7 +120,7 @@ class Dataset(data.Dataset):
                 continue
 
     def __len__(self):
-        return self.pathlist.shape[0] if self.len is None else self.len
+        return self.pathlist.shape[0] if self.length is None else self.length
 
 def init_fn(worker_id):
     np.random.seed(torch.initial_seed() % (2 ** 32))
