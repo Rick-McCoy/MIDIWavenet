@@ -7,14 +7,12 @@ Modified Wavenet that works on MIDI files.
 ### Prerequisites
 
 ```
-pytorch
+pytorch>=1.1.0
 tqdm
 numpy
 pretty-midi
 matplotlib
-tensorboard
-tensorboardX
-librosa
+tb-nightly>=1.14.0
 ```
 
 ### Installing
@@ -51,20 +49,20 @@ All hyperparameters are modifiable via flags. Please refer to train.py for speci
 
 Make sure your checkpoint is under /Checkpoints.
 
-If multiple checkpoints are present, the checkpoint with the largest number in its name will be automatically selected.
-
 Then, run
 
 ```
-python3 train.py --sample NUMBER_OF_SAMPLES
+python3 train.py --sample NUMBER_OF_SAMPLES --resume RESUME_CHECKPOINT_NUMBER
 ```
+
+If no --resume flag is given, the checkpoint with the largest number in its name will be selected.
 
 Generated samples & piano roll image files will be under /Samples.
 
 ## TODOs
 
 ~~Enable general generation of MIDI files: Currently only able to generate classical music.~~
-    -> General generation is now possible: only need to expand dataset. Unfortunately, specifying genre is impossible.
+    -> General generation is now possible: only need to expand dataset. Unfortunately, specifying genre is currently impossible.
 
 ~~Add length flag for sampling: Currently fixed at 4096 time steps. (\~43 seconds)~~
     -> ~~Added length flag. Unit of length: 1/96 (s)~~.
