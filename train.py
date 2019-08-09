@@ -58,21 +58,21 @@ class Trainer():
         self.test_writer = SummaryWriter('Logs/test')
         self.wavenet = Wavenet(args, self.train_writer)
         self.train_data_loader = DataLoader(
-            args.batch_size * torch.cuda.device_count(),
-            args.shuffle,
-            args.num_workers,
-            True,
-            self.args.output_length + self.wavenet.receptive_field + 1,
-            self.args.output_length,
-            self.args.sample_step * args.batch_size * torch.cuda.device_count()
+            batch_size=args.batch_size * torch.cuda.device_count(),
+            shuffle=args.shuffle,
+            num_workers=args.num_workers,
+            train=True,
+            input_length=self.args.output_length + self.wavenet.receptive_field + 1,
+            output_length=self.args.output_length,
+            dataset_length=self.args.sample_step * args.batch_size * torch.cuda.device_count()
         )
         self.test_data_loader = DataLoader(
-            args.batch_size * torch.cuda.device_count(),
-            args.shuffle,
-            args.num_workers,
-            False,
-            self.args.output_length + self.wavenet.receptive_field + 1,
-            self.args.output_length
+            batch_size=args.batch_size * torch.cuda.device_count(),
+            shuffle=args.shuffle,
+            num_workers=args.num_workers,
+            train=False,
+            input_length=self.args.output_length + self.wavenet.receptive_field + 1,
+            output_length=self.args.output_length
         )
         self.start_1 = 0
         self.start_2 = 0
@@ -95,6 +95,7 @@ class Trainer():
             self.wavenet.load(checkpoint)
             self.start_1 = self.wavenet.step // len(self.train_data_loader)
             self.start_2 = self.wavenet.step % len(self.train_data_loader)
+            self.train_data_loader.dataset.dataset_length *= self.wavenet.accumulate
 
     def run(self):
         """Runs training schemes for given number of epochs & sample steps.
@@ -112,7 +113,7 @@ class Trainer():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             with tqdm(
-                    range(self.args.num_epochs),
+                    range(self.start_1, self.args.num_epochs),
                     dynamic_ncols=True,
                     initial=self.start_1
             ) as pbar1:
@@ -120,7 +121,7 @@ class Trainer():
                     if self.args.increase_batch_size and epoch \
                         and epoch % self.args.increase_batch_size == 0:
                         self.wavenet.accumulate *= 4
-                        self.train_data_loader.dataset.length *= 4
+                        self.train_data_loader.dataset.dataset_length *= 4
                         tqdm.write('Accumulate = {}'.format(self.wavenet.accumulate))
                     with tqdm(
                             self.train_data_loader,
@@ -212,9 +213,9 @@ if __name__ == '__main__':
     PARSER.add_argument('--resume', type=int, default=0)
     PARSER.add_argument('--sample', type=int, default=0)
     PARSER.add_argument('--temperature', type=float, default=1.)
-    PARSER.add_argument('--batch_size', type=int, default=1)
+    PARSER.add_argument('--batch_size', type=int, default=16)
     PARSER.add_argument('--accumulate', type=int, default=1)
-    PARSER.add_argument('--increase_batch_size', type=int, default=0)
+    PARSER.add_argument('--increase_batch_size', type=int, default=1)
     PARSER.add_argument('--num_epochs', type=int, default=100)
     PARSER.add_argument('--sample_step', type=int, default=1024)
     PARSER.add_argument('--shuffle', type=bool, default=True)

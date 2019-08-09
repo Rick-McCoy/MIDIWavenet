@@ -1,6 +1,6 @@
 """Wavenet, the raw network itself.
 Contains various components of it as well as the network.
-No hardcoded values are present. All passed arguments can be changed without issues."""
+No hardcoded values, all passed arguments can be changed without issues."""
 import queue
 from torch import nn, cat, zeros
 from torch.utils.checkpoint import checkpoint
@@ -325,11 +325,10 @@ class ResidualStack(nn.Module):
         res_sum = 0
         for res_block in self.res_blocks:
             res_block.output_length = 1
-            top = target[..., -1:]
-            for que in res_block.queues:
+            tops = [target] + [que.get() for que in res_block.queues]
+            for que, top in zip(res_block.queues, tops[:-1]):
                 que.put(top)
-                top = que.get()
-                target = cat((top, target), dim=-1)
+            target = cat(tops[::-1], dim=-1)
             target, res_sum = res_block(target, res_sum=res_sum, sample=True)
         return res_sum
 

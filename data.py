@@ -77,7 +77,7 @@ def piano_rolls_to_midi(roll):
                 + [pm.Instrument(0, is_drum=True)]
     current_time = 0
     start_time = [[[]] * 128] * 129
-    roll = [roll[i : i + 4] for i in range(0, len(roll), 4)]
+    roll = [roll[i : i + 4] for i in range(0, len(roll) // 4 * 4, 4)]
     for event in roll:
         if event[0] == 1:
             continue
@@ -113,6 +113,7 @@ class Dataset(data.Dataset):
         self.input_length = input_length
         self.output_length = output_length
         self.dataset_length = dataset_length
+        self.base_dataset_length = dataset_length
 
     def __getitem__(self, index):
         while True:
@@ -126,7 +127,7 @@ class Dataset(data.Dataset):
                 continue
 
     def __len__(self):
-        return self.dataset_length if self.dataset_length else self.pathlist.shape[0]
+        return self.dataset_length if self.dataset_length else len(self.pathlist)
 
 class DataLoader(data.DataLoader):
     def __init__(
@@ -146,8 +147,8 @@ class DataLoader(data.DataLoader):
                 output_length,
                 dataset_length
             ),
-            batch_size,
-            shuffle,
+            batch_size=batch_size,
+            shuffle=shuffle,
             num_workers=num_workers,
             pin_memory=True,
             worker_init_fn=init_fn
