@@ -4,7 +4,7 @@ import os
 import torch
 from tqdm.autonotebook import tqdm
 from data import piano_rolls_to_midi
-from utils import top_p, to_image, clean, save_roll, get_score
+from utils import top_p, to_image, clean, save_roll, get_accuracy
 from network import Wavenet as WavenetModule
 
 class Wavenet:
@@ -74,7 +74,6 @@ class Wavenet:
         return loss / torch.cuda.device_count()
 
     def write_loss(self):
-        self.writer.add_scalar('Train/Train loss', self.loss_sum, self.step)
         self.writer.add_scalar('Train/Train loss count', self.loss_sum, self.count)
         self.loss_sum = 0
 
@@ -89,8 +88,9 @@ class Wavenet:
         self.writer.add_image('Score/Input', to_image(cleaned_input), self.step)
         cleaned_output = clean(output.argmax(dim=1))
         self.writer.add_image('Score/Output', to_image(cleaned_output), self.step)
-        score = get_score(output, cleaned_input)
+        score, accuracy = get_accuracy(torch.nn.functional.softmax(output, dim=2), cleaned_input)
         self.writer.add_image('Score/Score', score, self.step)
+        self.writer.add_scalar('Train/Accuracy', accuracy, self.step)
 
     def train(self, target: torch.Tensor, condition: torch.Tensor, output_length=1) -> torch.Tensor:
         """Training method; Calculates gradients for given input and returns loss.
@@ -115,8 +115,9 @@ class Wavenet:
         """
         loss = self.get_loss(target, condition, output_length) / self.accumulate
         loss.backward()
-        self.step += 1
         self.loss_sum += loss.item()
+        self.writer.add_scalar('Train/Training Loss', loss.item() * self.accumulate, self.step)
+        self.step += 1
         if self.step % self.accumulate == 0:
             self.write_loss()
             self.take_step()

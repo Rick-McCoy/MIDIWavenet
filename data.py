@@ -1,17 +1,15 @@
 import warnings
 import pathlib
 from torch.utils import data
+from mido.midifiles.meta import KeySignatureError
 import pretty_midi as pm
 import numpy as np
 from utils import init_fn
 
 PATHLIST = list(pathlib.Path('Datasets').glob('**/*.[Mm][Ii][Dd]'))
-# with open('lmd_pathlist.txt', 'r') as f:
-#     PATHLIST = f.readlines()
-# PATHLIST = [x.strip() for x in PATHLIST]
-# with open('pathlist.txt', 'r') as f:
-#     ADD_PATHLIST = f.readlines()
-# PATHLIST += [x.strip() for x in ADD_PATHLIST]
+with open('Pathlist.txt', 'r') as f:
+    PATHLIST = f.readlines()
+PATHLIST = [x.strip() for x in PATHLIST]
 np.random.shuffle(PATHLIST)
 TRAIN_LIST = PATHLIST[:-1024]
 TEST_LIST = PATHLIST[-1024:]
@@ -123,7 +121,7 @@ class Dataset(data.Dataset):
                     self.input_length,
                     self.output_length
                 )
-            except IndexError:
+            except (IndexError, IOError, EOFError, ValueError, KeySignatureError):
                 continue
 
     def __len__(self):

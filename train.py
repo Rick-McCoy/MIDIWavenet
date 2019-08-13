@@ -120,8 +120,8 @@ class Trainer():
                 for epoch in pbar1:
                     if self.args.increase_batch_size and epoch \
                         and epoch % self.args.increase_batch_size == 0:
-                        self.wavenet.accumulate *= 4
-                        self.train_data_loader.dataset.dataset_length *= 4
+                        self.wavenet.accumulate *= 2
+                        self.train_data_loader.dataset.dataset_length *= 2
                         tqdm.write('Accumulate = {}'.format(self.wavenet.accumulate))
                     with tqdm(
                             self.train_data_loader,
