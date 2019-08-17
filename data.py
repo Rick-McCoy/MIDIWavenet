@@ -74,7 +74,7 @@ def piano_rolls_to_midi(roll):
     instruments = [pm.Instrument(i) for i in range(128)] \
                 + [pm.Instrument(0, is_drum=True)]
     current_time = 0
-    start_time = [[[]] * 128] * 129
+    start_time = [[[] for _ in range(128)] for _ in range(129)]
     roll = [roll[i : i + 4] for i in range(0, len(roll) // 4 * 4, 4)]
     for event in roll:
         if event[0] == 1:
@@ -107,17 +107,18 @@ def piano_rolls_to_midi(roll):
 class Dataset(data.Dataset):
     def __init__(self, train, input_length, output_length, dataset_length):
         super(Dataset, self).__init__()
-        self.pathlist = np.array(TRAIN_LIST if train else TEST_LIST)
+        self.pathlist = TRAIN_LIST if train else TEST_LIST
         self.input_length = input_length
         self.output_length = output_length
         self.dataset_length = dataset_length
-        self.base_dataset_length = dataset_length
+        self.count = -1
 
     def __getitem__(self, index):
         while True:
             try:
+                self.count = (self.count + 1) % len(self.pathlist)
                 return midi_roll(
-                    np.random.choice(self.pathlist),
+                    self.pathlist[self.count],
                     self.input_length,
                     self.output_length
                 )

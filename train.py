@@ -93,7 +93,7 @@ class Trainer():
         checkpoint = get_checkpoint(resume)
         if checkpoint is not None:
             self.wavenet.load(checkpoint)
-            self.start_1 = self.wavenet.step // len(self.train_data_loader)
+            self.start_1 = self.wavenet.count // len(self.train_data_loader)
             self.start_2 = self.wavenet.step % len(self.train_data_loader)
             self.train_data_loader.dataset.dataset_length *= self.wavenet.accumulate
 
@@ -113,7 +113,7 @@ class Trainer():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             with tqdm(
-                    range(self.start_1, self.args.num_epochs),
+                    range(self.args.num_epochs),
                     dynamic_ncols=True,
                     initial=self.start_1
             ) as pbar1:
@@ -150,12 +150,12 @@ class Trainer():
                         test_loss = sum(test_loss) / len(test_loss)
                         pbar1.set_postfix(loss=test_loss)
                         sampled_image = self.sample(num=1, name=self.wavenet.step)
-                        self.test_write(loss=test_loss, image=sampled_image)
+                        self.write_test_loss(loss=test_loss, image=sampled_image)
                         self.wavenet.save()
         self.test_writer.close()
         self.train_writer.close()
 
-    def test_write(self, loss, image):
+    def write_test_loss(self, loss, image):
         self.test_writer.add_scalar(
             tag='Test/Test loss count',
             scalar_value=loss,

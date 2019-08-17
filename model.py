@@ -89,6 +89,7 @@ class Wavenet:
         cleaned_output = clean(output.argmax(dim=1))
         self.writer.add_image('Score/Output', to_image(cleaned_output), self.step)
         score, accuracy = get_accuracy(torch.nn.functional.softmax(output, dim=2), cleaned_input)
+        self.writer.add_histogram('Score/Accuracy', score, self.step)
         self.writer.add_image('Score/Score', score, self.step)
         self.writer.add_scalar('Train/Accuracy', accuracy, self.step)
 
