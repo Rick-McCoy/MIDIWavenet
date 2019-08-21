@@ -1,13 +1,13 @@
 import warnings
-import pathlib
+# import pathlib
 from torch.utils import data
 from mido.midifiles.meta import KeySignatureError
 import pretty_midi as pm
 import numpy as np
 from utils import init_fn
 
-PATHLIST = list(pathlib.Path('Datasets').glob('**/*.[Mm][Ii][Dd]'))
-with open('Pathlist.txt', 'r') as f:
+# PATHLIST = list(pathlib.Path('Datasets').glob('**/*.[Mm][Ii][Dd]'))
+with open('pathlist.txt', 'r') as f:
     PATHLIST = f.readlines()
 PATHLIST = [x.strip() for x in PATHLIST]
 np.random.shuffle(PATHLIST)
@@ -107,18 +107,16 @@ def piano_rolls_to_midi(roll):
 class Dataset(data.Dataset):
     def __init__(self, train, input_length, output_length, dataset_length):
         super(Dataset, self).__init__()
-        self.pathlist = TRAIN_LIST if train else TEST_LIST
+        self.pathlist = np.array(TRAIN_LIST if train else TEST_LIST)
         self.input_length = input_length
         self.output_length = output_length
         self.dataset_length = dataset_length
-        self.count = -1
 
     def __getitem__(self, index):
         while True:
             try:
-                self.count = (self.count + 1) % len(self.pathlist)
                 return midi_roll(
-                    self.pathlist[self.count],
+                    np.random.choice(self.pathlist),
                     self.input_length,
                     self.output_length
                 )

@@ -2,8 +2,8 @@
 Contains various components of it as well as the network.
 No hardcoded values, all passed arguments can be changed without issues."""
 import queue
+from math import sqrt
 from torch import nn, cat, zeros
-from torch.utils.checkpoint import checkpoint
 from utils import causal_pad
 
 class DilatedConv1d(nn.Module):
@@ -300,13 +300,14 @@ class ResidualStack(nn.Module):
                 dilation
             ) for dilation in self.dilations
         ])
+        self.norm = sqrt(len(self.res_blocks))
 
     def forward(self, target, condition, output_length):
         res_sum = zeros((1, 1, 1), device=target.device)
         for res_block in self.res_blocks:
             res_block.output_length = output_length
-            target, res_sum = checkpoint(res_block, target, condition, res_sum)
-        return res_sum
+            target, res_sum = res_block(target, condition, res_sum)
+        return res_sum / self.norm
 
     def sample_forward(self, target):
         """Sampling function, operates at O(stack_size * layer_size * kernel_size).
