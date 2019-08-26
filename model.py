@@ -4,7 +4,7 @@ import os
 import torch
 from tqdm.autonotebook import tqdm
 from data import piano_rolls_to_midi
-from utils import top_p, to_image, clean, save_roll, get_accuracy
+from utils import top_p, to_image, clean, save_roll, get_confidence, get_accuracy
 from network import Wavenet as WavenetModule
 
 class Wavenet:
@@ -88,10 +88,19 @@ class Wavenet:
         self.writer.add_image('Score/Input', to_image(cleaned_input), self.step)
         cleaned_output = clean(output.argmax(dim=1))
         self.writer.add_image('Score/Output', to_image(cleaned_output), self.step)
-        score, accuracy = get_accuracy(torch.nn.functional.softmax(output, dim=2), cleaned_input)
-        self.writer.add_histogram('Score/Accuracy', score, self.step)
-        self.writer.add_image('Score/Score', score, self.step)
-        self.writer.add_scalar('Train/Accuracy', accuracy, self.count)
+        score_confidence, confidence = get_confidence(
+            torch.nn.functional.softmax(output, dim=1),
+            cleaned_input
+        )
+        score_accuracy, accuracy = get_accuracy(
+            output,
+            cleaned_input
+        )
+        self.writer.add_histogram('Score/Confidence', score_confidence, self.step)
+        self.writer.add_image('Score/Confindence_image', score_confidence, self.step)
+        self.writer.add_image('Score/Accuracy_image', score_accuracy, self.step)
+        self.writer.add_scalar('Train/Confidence', confidence, self.step)
+        self.writer.add_scalar('Train/Accuracy', accuracy, self.step)
 
     def train(self, target: torch.Tensor, condition: torch.Tensor, output_length=1) -> torch.Tensor:
         """Training method; Calculates gradients for given input and returns loss.
@@ -122,7 +131,7 @@ class Wavenet:
         if self.step % self.accumulate == 0:
             self.write_loss()
             self.take_step()
-        if self.count % 100 == 0 and self.step % 100 == 0:
+        if self.step % 100 == 0:
             self.write_image(target[:1], condition[:1], output_length)
         return loss.item() * self.accumulate
 

@@ -23,11 +23,16 @@ def to_image(target: np.ndarray) -> np.ndarray:
 def clean(target: torch.Tensor) -> np.ndarray:
     return target.detach().cpu().numpy()[0]
 
-def get_accuracy(output: torch.Tensor, answer: torch.Tensor) -> np.ndarray:
+def get_confidence(output: torch.Tensor, answer: np.ndarray) -> (np.ndarray, float):
     output = clean(output)
     score = np.broadcast_to(output[answer, np.arange(output.shape[-1])], output.shape)
-    accuracy = np.average(score)
-    return np.expand_dims(score, axis=0), accuracy
+    confidence = np.average(score)
+    return np.expand_dims(score, axis=0), confidence
+
+def get_accuracy(output: torch.Tensor, answer: np.ndarray) -> (np.ndarray, float):
+    output = clean(output.argmax(dim=1))
+    score = np.broadcast_to(output == answer, (1, 128, output.shape[0]))
+    return score, np.average(score)
 
 def save_roll(target: np.ndarray, step: int):
     data = np.zeros((128, target.shape[0]))

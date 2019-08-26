@@ -64,7 +64,10 @@ class Trainer():
             train=True,
             input_length=self.args.output_length + self.wavenet.receptive_field + 1,
             output_length=self.args.output_length,
-            dataset_length=self.args.sample_step * args.batch_size * torch.cuda.device_count()
+            dataset_length=self.args.sample_step *
+            self.args.accumulate *
+            self.args.batch_size *
+            torch.cuda.device_count()
         )
         self.test_data_loader = DataLoader(
             batch_size=args.batch_size * torch.cuda.device_count(),
@@ -95,7 +98,9 @@ class Trainer():
             self.wavenet.load(checkpoint)
             self.start_1 = self.wavenet.count // len(self.train_data_loader)
             self.start_2 = self.wavenet.step % len(self.train_data_loader)
-            self.train_data_loader.dataset.dataset_length *= self.wavenet.accumulate
+            self.train_data_loader.dataset.dataset_length = \
+                self.args.sample_step * self.wavenet.accumulate * \
+                    self.args.batch_size * torch.cuda.device_count()
 
     def run(self):
         """Runs training schemes for given number of epochs & sample steps.
@@ -118,8 +123,8 @@ class Trainer():
                     initial=self.start_1
             ) as pbar1:
                 for epoch in pbar1:
-                    if self.args.increase_batch_size and epoch \
-                        and epoch % self.args.increase_batch_size == 0:
+                    if self.args.increase_batch_size and (epoch + self.start_1) \
+                        and (epoch + self.start_1) % self.args.increase_batch_size == 0:
                         self.wavenet.accumulate *= 2
                         self.train_data_loader.dataset.dataset_length *= 2
                         tqdm.write('Accumulate = {}'.format(self.wavenet.accumulate))
